@@ -1,0 +1,26 @@
+services:
+  dityy-popup-manager:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: file:/data/dev.sqlite
+      SHOPIFY_APP_URL: https://popup.muhammedmekky.com
+      SHOPIFY_API_KEY: ${SHOPIFY_API_KEY}
+      SHOPIFY_API_SECRET: ${SHOPIFY_API_SECRET}
+      SCOPES: ${SCOPES:-}
+    ports:
+      - "3000:3000"
+    volumes:
+      - dityy-popup-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+volumes:
+  dityy-popup-data:

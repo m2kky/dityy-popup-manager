@@ -1,0 +1,21 @@
+{{ 'dityy-popups.css' | asset_url | stylesheet_tag }}
+
+{%- assign dityy_popups_config = app.metafields.dityy_popups.config.value | default: '[]' -%}
+
+<div
+  data-dityy-popups-root
+  data-config="{{ dityy_popups_config | escape }}"
+  data-page-type="{{ request.page_type | escape }}"
+  data-path="{{ request.path | escape }}"
+></div>
+
+<script src="{{ 'dityy-popups.js' | asset_url }}" defer="defer"></script>
+
+{% schema %}
+{
+  "name": "Dityy Popup Embed",
+  "target": "body",
+  "settings": []
+}
+{% endschema %}
+
