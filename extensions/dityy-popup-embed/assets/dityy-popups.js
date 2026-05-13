@@ -3,6 +3,7 @@
   if (!roots.length) return;
 
   const root = roots[0];
+  const eventsUrl = root.getAttribute("data-events-url") || "";
   let popups = [];
 
   try {
@@ -15,8 +16,40 @@
 
   const pageType = root.getAttribute("data-page-type") || "";
   const path = root.getAttribute("data-path") || window.location.pathname;
-  let isOpen = false;
-  let hasShown = false;
+  let isModalOpen = false;
+  let hasShownModal = false;
+
+  const track = (popup, type, extra) => {
+    if (!eventsUrl || !popup || !popup.id) return;
+
+    const payload = JSON.stringify({
+      popupId: popup.id,
+      type,
+      path,
+      pageType,
+      referrer: document.referrer || "",
+      ...(extra || {}),
+    });
+
+    if (navigator.sendBeacon) {
+      navigator.sendBeacon(eventsUrl, new Blob([payload], { type: "text/plain" }));
+      return;
+    }
+
+    fetch(eventsUrl, {
+      method: "POST",
+      mode: "cors",
+      headers: { "content-type": "text/plain" },
+      body: payload,
+      keepalive: true,
+    }).catch(function () {});
+  };
+
+  const matchesDevice = (popup) => {
+    if (!popup.deviceMode || popup.deviceMode === "all") return true;
+    const isMobile = window.matchMedia("(max-width: 749px)").matches;
+    return popup.deviceMode === "mobile" ? isMobile : !isMobile;
+  };
 
   const matchesPage = (popup) => {
     switch (popup.pageMode) {
@@ -36,7 +69,7 @@
     }
   };
 
-  const storageKey = (popup) => `dityy-popup:${popup.id}`;
+  const storageKey = (popup) => "dityy-popup:" + popup.id;
 
   const canShowByFrequency = (popup) => {
     if (popup.frequency === "always") return true;
@@ -65,11 +98,11 @@
     }
   };
 
-  const closePopup = () => {
-    const overlay = document.querySelector(".dityy-popup-overlay");
-    if (overlay) overlay.remove();
-    document.documentElement.classList.remove("dityy-popup-lock");
-    isOpen = false;
+  const applyColors = (element, popup) => {
+    element.style.setProperty("--dityy-popup-bg", popup.backgroundColor || "#ffffff");
+    element.style.setProperty("--dityy-popup-text", popup.textColor || "#161616");
+    element.style.setProperty("--dityy-popup-accent", popup.accentColor || "#0f6b57");
+    element.style.setProperty("--dityy-popup-button", popup.buttonColor || "#111111");
   };
 
   const textNode = (tag, className, text) => {
@@ -79,87 +112,195 @@
     return element;
   };
 
-  const showPopup = (popup) => {
-    if (isOpen || hasShown || !canShowByFrequency(popup)) return;
+  const buildCampaign = (popup, displayClass) => {
+    const card = document.createElement("div");
+    card.className = "dityy-popup-card " + displayClass;
+    applyColors(card, popup);
 
-    isOpen = true;
-    hasShown = true;
+    if (popup.imageUrl) {
+      const image = document.createElement("img");
+      image.className = "dityy-popup-card__image";
+      image.src = popup.imageUrl;
+      image.alt = popup.title || popup.name || "";
+      image.loading = "lazy";
+      card.appendChild(image);
+    }
+
+    const content = document.createElement("div");
+    content.className = "dityy-popup-card__content";
+
+    if (popup.title) {
+      content.appendChild(textNode("h2", "dityy-popup-card__title", popup.title));
+    }
+
+    if (popup.body) {
+      content.appendChild(textNode("p", "dityy-popup-card__body", popup.body));
+    }
+
+    if (popup.collectEmail || popup.collectPhone) {
+      const form = document.createElement("form");
+      form.className = "dityy-popup-card__form";
+
+      if (popup.collectEmail) {
+        const input = document.createElement("input");
+        input.name = "email";
+        input.type = "email";
+        input.placeholder = "Email";
+        input.required = true;
+        form.appendChild(input);
+      }
+
+      if (popup.collectPhone) {
+        const input = document.createElement("input");
+        input.name = "phone";
+        input.type = "tel";
+        input.placeholder = "Phone";
+        form.appendChild(input);
+      }
+
+      const submit = document.createElement("button");
+      submit.type = "submit";
+      submit.textContent = popup.leadButtonLabel || "Send";
+      form.appendChild(submit);
+
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const data = new FormData(form);
+        track(popup, "lead", {
+          email: String(data.get("email") || ""),
+          phone: String(data.get("phone") || ""),
+        });
+        form.replaceWith(textNode("p", "dityy-popup-card__success", popup.successMessage || "Thanks."));
+      });
+
+      content.appendChild(form);
+    }
+
+    if (popup.primaryLabel && popup.primaryUrl) {
+      const link = document.createElement("a");
+      link.className = "dityy-popup-card__button";
+      link.href = popup.primaryUrl;
+      link.textContent = popup.primaryLabel;
+      link.addEventListener("click", () => track(popup, "click"));
+      content.appendChild(link);
+    }
+
+    card.appendChild(content);
+    return card;
+  };
+
+  const closeModal = (popup) => {
+    const overlay = document.querySelector(".dityy-popup-overlay");
+    if (overlay) overlay.remove();
+    document.documentElement.classList.remove("dityy-popup-lock");
+    isModalOpen = false;
+    if (popup) track(popup, "close");
+  };
+
+  const showPopup = (popup) => {
+    if (isModalOpen || hasShownModal || !canShowByFrequency(popup)) return;
+
+    isModalOpen = true;
+    hasShownModal = true;
     markShown(popup);
+    track(popup, "view");
     document.documentElement.classList.add("dityy-popup-lock");
 
     const overlay = document.createElement("div");
-    overlay.className = "dityy-popup-overlay";
+    overlay.className = "dityy-popup-overlay dityy-popup-overlay--" + (popup.position || "center");
     overlay.setAttribute("role", "dialog");
     overlay.setAttribute("aria-modal", "true");
 
     const modal = document.createElement("div");
-    modal.className = "dityy-popup";
+    modal.className = "dityy-popup-modal";
 
     const closeButton = document.createElement("button");
-    closeButton.className = "dityy-popup__close";
+    closeButton.className = "dityy-popup-card__close";
     closeButton.type = "button";
     closeButton.setAttribute("aria-label", "Close popup");
-    closeButton.textContent = "×";
-    closeButton.addEventListener("click", closePopup);
+    closeButton.textContent = "x";
+    closeButton.addEventListener("click", () => closeModal(popup));
 
     modal.appendChild(closeButton);
-
-    if (popup.imageUrl) {
-      const image = document.createElement("img");
-      image.className = "dityy-popup__image";
-      image.src = popup.imageUrl;
-      image.alt = popup.title || popup.name || "";
-      image.loading = "lazy";
-      modal.appendChild(image);
-    }
-
-    const content = document.createElement("div");
-    content.className = "dityy-popup__content";
-
-    if (popup.title) {
-      content.appendChild(textNode("h2", "dityy-popup__title", popup.title));
-    }
-
-    if (popup.body) {
-      content.appendChild(textNode("p", "dityy-popup__body", popup.body));
-    }
-
-    if (popup.primaryLabel && popup.primaryUrl) {
-      const actions = document.createElement("div");
-      actions.className = "dityy-popup__actions";
-      const link = document.createElement("a");
-      link.className = "dityy-popup__button";
-      link.href = popup.primaryUrl;
-      link.textContent = popup.primaryLabel;
-      link.addEventListener("click", closePopup);
-      actions.appendChild(link);
-      content.appendChild(actions);
-    }
-
-    modal.appendChild(content);
+    modal.appendChild(buildCampaign(popup, "dityy-popup-card--popup"));
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
 
     overlay.addEventListener("click", (event) => {
-      if (event.target === overlay) closePopup();
+      if (event.target === overlay) closeModal(popup);
     });
   };
 
+  const showBar = (popup) => {
+    if (!canShowByFrequency(popup)) return;
+
+    markShown(popup);
+    track(popup, "view");
+    const bar = buildCampaign(popup, "dityy-popup-card--bar dityy-popup-card--" + (popup.position || "top"));
+    const closeButton = document.createElement("button");
+    closeButton.className = "dityy-popup-card__close dityy-popup-card__close--bar";
+    closeButton.type = "button";
+    closeButton.textContent = "x";
+    closeButton.addEventListener("click", () => {
+      bar.remove();
+      track(popup, "close");
+    });
+    bar.appendChild(closeButton);
+    document.body.appendChild(bar);
+  };
+
+  const showEmbed = (popup) => {
+    if (!canShowByFrequency(popup)) return;
+
+    markShown(popup);
+    track(popup, "view");
+    const embed = buildCampaign(popup, "dityy-popup-card--embed");
+    const target =
+      document.querySelector(".product-form") ||
+      document.querySelector("main") ||
+      document.body;
+
+    if (target === document.body) {
+      document.body.insertBefore(embed, document.body.firstChild);
+    } else {
+      target.parentNode.insertBefore(embed, target.nextSibling);
+    }
+  };
+
   const eligiblePopups = popups
-    .filter((popup) => popup && popup.enabled && matchesPage(popup))
+    .filter((popup) => popup && popup.enabled && matchesPage(popup) && matchesDevice(popup))
     .filter(canShowByFrequency)
     .sort((first, second) => Number(second.priority || 0) - Number(first.priority || 0));
 
   if (!eligiblePopups.length) return;
 
+  const renderCampaign = (popup) => {
+    if (popup.displayType === "bar") {
+      showBar(popup);
+      return;
+    }
+
+    if (popup.displayType === "embed") {
+      showEmbed(popup);
+      return;
+    }
+
+    showPopup(popup);
+  };
+
   const schedulePopup = (popup) => {
+    if (popup.displayType === "bar" || popup.displayType === "embed") {
+      renderCampaign(popup);
+      return;
+    }
+
     if (popup.trigger === "scroll") {
       const onScroll = () => {
         const scrollable = document.documentElement.scrollHeight - window.innerHeight;
         const progress = scrollable <= 0 ? 100 : (window.scrollY / scrollable) * 100;
         if (progress >= Number(popup.scrollPercent || 40)) {
           window.removeEventListener("scroll", onScroll);
-          showPopup(popup);
+          renderCampaign(popup);
         }
       };
       window.addEventListener("scroll", onScroll, { passive: true });
@@ -171,14 +312,14 @@
       const onMouseLeave = (event) => {
         if (event.clientY <= 0) {
           document.removeEventListener("mouseleave", onMouseLeave);
-          showPopup(popup);
+          renderCampaign(popup);
         }
       };
       document.addEventListener("mouseleave", onMouseLeave);
       return;
     }
 
-    window.setTimeout(() => showPopup(popup), Math.max(0, Number(popup.delaySeconds) || 0) * 1000);
+    window.setTimeout(() => renderCampaign(popup), Math.max(0, Number(popup.delaySeconds) || 0) * 1000);
   };
 
   eligiblePopups.forEach(schedulePopup);
