@@ -7,6 +7,7 @@
   data-config="{{ dityy_popups_config | escape }}"
   data-page-type="{{ request.page_type | escape }}"
   data-path="{{ request.path | escape }}"
+  data-cart-total="{{ cart.total_price | default: 0 }}"
   data-events-url="https://popup.muhammedmekky.com/api/events"
 ></div>
 

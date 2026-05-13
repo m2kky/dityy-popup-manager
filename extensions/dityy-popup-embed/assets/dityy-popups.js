@@ -16,6 +16,7 @@
 
   const pageType = root.getAttribute("data-page-type") || "";
   const path = root.getAttribute("data-path") || window.location.pathname;
+  const cartSubtotal = (Number(root.getAttribute("data-cart-total") || 0) || 0) / 100;
   let isModalOpen = false;
   let hasShownModal = false;
 
@@ -69,6 +70,16 @@
     }
   };
 
+  const matchesCart = (popup) => {
+    const min = Number(popup.cartMinSubtotal || 0);
+    const max = Number(popup.cartMaxSubtotal || 0);
+
+    if (min > 0 && cartSubtotal < min) return false;
+    if (max > 0 && cartSubtotal > max) return false;
+
+    return true;
+  };
+
   const storageKey = (popup) => "dityy-popup:" + popup.id;
 
   const canShowByFrequency = (popup) => {
@@ -112,6 +123,30 @@
     return element;
   };
 
+  const formatRemaining = (target) => {
+    const remaining = Math.max(0, new Date(target).getTime() - Date.now());
+    const days = Math.floor(remaining / 86400000);
+    const hours = Math.floor((remaining % 86400000) / 3600000);
+    const minutes = Math.floor((remaining % 3600000) / 60000);
+    const seconds = Math.floor((remaining % 60000) / 1000);
+
+    return { days, hours, minutes, seconds };
+  };
+
+  const startCountdown = (element, target) => {
+    const render = () => {
+      const remaining = formatRemaining(target);
+      element.innerHTML =
+        '<span><strong>' + String(remaining.days).padStart(2, "0") + '</strong><small>Days</small></span>' +
+        '<span><strong>' + String(remaining.hours).padStart(2, "0") + '</strong><small>Hours</small></span>' +
+        '<span><strong>' + String(remaining.minutes).padStart(2, "0") + '</strong><small>Min</small></span>' +
+        '<span><strong>' + String(remaining.seconds).padStart(2, "0") + '</strong><small>Sec</small></span>';
+    };
+
+    render();
+    window.setInterval(render, 1000);
+  };
+
   const buildCampaign = (popup, displayClass) => {
     const card = document.createElement("div");
     card.className = "dityy-popup-card " + displayClass;
@@ -133,8 +168,26 @@
       content.appendChild(textNode("h2", "dityy-popup-card__title", popup.title));
     }
 
-    if (popup.body) {
-      content.appendChild(textNode("p", "dityy-popup-card__body", popup.body));
+    let bodyElement = null;
+    if (popup.body || popup.campaignType === "multi_announcement") {
+      const messages = Array.isArray(popup.messages) && popup.messages.length ? popup.messages : [popup.body || ""];
+      bodyElement = textNode("p", "dityy-popup-card__body", messages[0] || popup.body || "");
+      content.appendChild(bodyElement);
+
+      if (popup.campaignType === "multi_announcement" && messages.length > 1) {
+        let index = 0;
+        window.setInterval(() => {
+          index = (index + 1) % messages.length;
+          bodyElement.textContent = messages[index];
+        }, 3500);
+      }
+    }
+
+    if (popup.campaignType === "countdown" && popup.countdownEndsAt) {
+      const countdown = document.createElement("div");
+      countdown.className = "dityy-popup-card__countdown";
+      startCountdown(countdown, popup.countdownEndsAt);
+      content.appendChild(countdown);
     }
 
     if (popup.collectEmail || popup.collectPhone) {
@@ -268,7 +321,7 @@
   };
 
   const eligiblePopups = popups
-    .filter((popup) => popup && popup.enabled && matchesPage(popup) && matchesDevice(popup))
+    .filter((popup) => popup && popup.enabled && matchesPage(popup) && matchesDevice(popup) && matchesCart(popup))
     .filter(canShowByFrequency)
     .sort((first, second) => Number(second.priority || 0) - Number(first.priority || 0));
 

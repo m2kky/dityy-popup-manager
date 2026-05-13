@@ -46,6 +46,16 @@ type PopupStats = {
   leads: number;
 };
 
+type LeadRow = {
+  id: string;
+  popupId: string;
+  email: string | null;
+  phone: string | null;
+  name: string | null;
+  path: string | null;
+  createdAt: string;
+};
+
 type PopupConfig = {
   id: string;
   enabled: boolean;
@@ -54,15 +64,19 @@ type PopupConfig = {
   displayType: DisplayType;
   title: string;
   body: string;
+  messages: string[];
   imageUrl: string;
   primaryLabel: string;
   primaryUrl: string;
+  countdownEndsAt: string;
   collectEmail: boolean;
   collectPhone: boolean;
   leadButtonLabel: string;
   successMessage: string;
   pageMode: PopupPageMode;
   urlContains: string;
+  cartMinSubtotal: number;
+  cartMaxSubtotal: number;
   deviceMode: DeviceMode;
   trigger: PopupTrigger;
   delaySeconds: number;
@@ -81,6 +95,7 @@ type LoaderData = {
   appInstallationId: string;
   popups: PopupConfig[];
   stats: Record<string, PopupStats>;
+  leads: LeadRow[];
 };
 
 type ActionData =
@@ -103,7 +118,6 @@ const campaignTypes: Array<{
     id: "multi_announcement",
     label: "Multi-announcement",
     description: "Rotate multiple messages in one campaign.",
-    tag: "Next",
   },
   {
     id: "email_signup",
@@ -124,7 +138,6 @@ const campaignTypes: Array<{
     id: "countdown",
     label: "Countdown timer",
     description: "Create urgency around limited-time campaigns.",
-    tag: "Next",
   },
 ];
 
@@ -161,15 +174,19 @@ const defaultPopup = (): PopupConfig => ({
   displayType: "popup",
   title: "Your headline goes here",
   body: "Use this space for a clear offer, message, or signup benefit.",
+  messages: ["Your first announcement", "Your second announcement"],
   imageUrl: "",
   primaryLabel: "Shop now",
   primaryUrl: "/collections/all",
+  countdownEndsAt: "",
   collectEmail: false,
   collectPhone: false,
   leadButtonLabel: "Send",
   successMessage: "Thanks. We received your details.",
   pageMode: "all",
   urlContains: "",
+  cartMinSubtotal: 0,
+  cartMaxSubtotal: 0,
   deviceMode: "all",
   trigger: "delay",
   delaySeconds: 5,
@@ -191,6 +208,16 @@ const numberOrDefault = (value: unknown, fallback: number) => {
 
 const stringOrDefault = (value: unknown, fallback = "") =>
   typeof value === "string" ? value : fallback;
+
+const stringArrayOrDefault = (value: unknown, fallback: string[]) => {
+  if (!Array.isArray(value)) return fallback;
+
+  const strings = value
+    .map((item) => (typeof item === "string" ? item.trim() : ""))
+    .filter(Boolean);
+
+  return strings.length ? strings : fallback;
+};
 
 const booleanOrDefault = (value: unknown, fallback = false) =>
   typeof value === "boolean" ? value : fallback;
@@ -220,9 +247,11 @@ const parsePopups = (value: unknown): PopupConfig[] => {
       displayType: enumValue(record.displayType, displayTypes.map((item) => item.id), "popup"),
       title: stringOrDefault(record.title, base.title),
       body: stringOrDefault(record.body, base.body),
+      messages: stringArrayOrDefault(record.messages, base.messages),
       imageUrl: stringOrDefault(record.imageUrl),
       primaryLabel: stringOrDefault(record.primaryLabel, base.primaryLabel),
       primaryUrl: stringOrDefault(record.primaryUrl, base.primaryUrl),
+      countdownEndsAt: stringOrDefault(record.countdownEndsAt),
       collectEmail: booleanOrDefault(record.collectEmail),
       collectPhone: booleanOrDefault(record.collectPhone),
       leadButtonLabel: stringOrDefault(record.leadButtonLabel, base.leadButtonLabel),
@@ -233,6 +262,8 @@ const parsePopups = (value: unknown): PopupConfig[] => {
         "all",
       ),
       urlContains: stringOrDefault(record.urlContains),
+      cartMinSubtotal: Math.max(0, numberOrDefault(record.cartMinSubtotal, 0)),
+      cartMaxSubtotal: Math.max(0, numberOrDefault(record.cartMaxSubtotal, 0)),
       deviceMode: enumValue(record.deviceMode, ["all", "desktop", "mobile"] as const, "all"),
       trigger: enumValue(record.trigger, ["delay", "scroll", "exit"] as const, "delay"),
       delaySeconds: Math.max(0, numberOrDefault(record.delaySeconds, 5)),
@@ -300,10 +331,24 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     return acc;
   }, {});
 
+  const leads = await prisma.popupLead.findMany({
+    orderBy: { createdAt: "desc" },
+    take: 100,
+  });
+
   return {
     appInstallationId: appInstallation.id,
     popups,
     stats,
+    leads: leads.map((lead) => ({
+      id: lead.id,
+      popupId: lead.popupId,
+      email: lead.email,
+      phone: lead.phone,
+      name: lead.name,
+      path: lead.path,
+      createdAt: lead.createdAt.toISOString(),
+    })),
   } satisfies LoaderData;
 };
 
@@ -424,6 +469,9 @@ export default function Index() {
   const enabledCount = useMemo(() => popups.filter((popup) => popup.enabled).length, [popups]);
   const activePopup = popups.find((popup) => popup.id === activeId) ?? null;
   const activeStats = activePopup ? loaderData.stats[activePopup.id] || emptyStats() : emptyStats();
+  const activeLeads = activePopup
+    ? loaderData.leads.filter((lead) => lead.popupId === activePopup.id)
+    : [];
   const isSaving = saveFetcher.state !== "idle";
   const isUploading = uploadFetcher.state !== "idle";
 
@@ -462,6 +510,10 @@ export default function Index() {
       collectEmail: campaignType === "email_signup",
       collectPhone: campaignType === "email_signup",
       name: campaignTypes.find((item) => item.id === campaignType)?.label || "New popup",
+      countdownEndsAt:
+        campaignType === "countdown"
+          ? new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().slice(0, 16)
+          : "",
     };
     setPopups((current) => [...current, popup]);
     setActiveId(popup.id);
@@ -501,6 +553,31 @@ export default function Index() {
       },
       { method: "POST" },
     );
+  };
+
+  const exportActiveLeads = () => {
+    if (!activePopup || activeLeads.length === 0) return;
+
+    const headers = ["createdAt", "campaign", "email", "phone", "name", "path"];
+    const rows = activeLeads.map((lead) => [
+      lead.createdAt,
+      activePopup.name,
+      lead.email || "",
+      lead.phone || "",
+      lead.name || "",
+      lead.path || "",
+    ]);
+    const escapeCell = (value: string) => `"${value.replace(/"/g, '""')}"`;
+    const csv = [headers, ...rows]
+      .map((row) => row.map((cell) => escapeCell(String(cell))).join(","))
+      .join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${activePopup.name || "popup"}-leads.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   const submitUpload = (event: ChangeEvent<HTMLInputElement>) => {
@@ -686,6 +763,36 @@ export default function Index() {
                         Description
                         <textarea dir="auto" rows={4} value={activePopup.body} onChange={(event) => updatePopup(activePopup.id, "body", event.currentTarget.value)} />
                       </label>
+                      {activePopup.campaignType === "multi_announcement" && (
+                        <label>
+                          Rotating messages
+                          <textarea
+                            dir="auto"
+                            rows={4}
+                            value={activePopup.messages.join("\n")}
+                            onChange={(event) =>
+                              updatePopup(
+                                activePopup.id,
+                                "messages",
+                                event.currentTarget.value
+                                  .split("\n")
+                                  .map((item) => item.trim())
+                                  .filter(Boolean),
+                              )
+                            }
+                          />
+                        </label>
+                      )}
+                      {activePopup.campaignType === "countdown" && (
+                        <label>
+                          Countdown ends at
+                          <input
+                            type="datetime-local"
+                            value={activePopup.countdownEndsAt}
+                            onChange={(event) => updatePopup(activePopup.id, "countdownEndsAt", event.currentTarget.value)}
+                          />
+                        </label>
+                      )}
                       <div className="dityy-field-grid">
                         <label>
                           Button label
@@ -774,6 +881,14 @@ export default function Index() {
                             <option value="mobile">Mobile only</option>
                           </select>
                         </label>
+                        <label>
+                          Cart subtotal from
+                          <input type="number" min={0} value={activePopup.cartMinSubtotal} onChange={(event) => updatePopup(activePopup.id, "cartMinSubtotal", Number(event.currentTarget.value))} />
+                        </label>
+                        <label>
+                          Cart subtotal to
+                          <input type="number" min={0} value={activePopup.cartMaxSubtotal} onChange={(event) => updatePopup(activePopup.id, "cartMaxSubtotal", Number(event.currentTarget.value))} />
+                        </label>
                       </div>
                     </div>
                   )}
@@ -839,6 +954,25 @@ export default function Index() {
                         <span><strong>{activeStats.leads}</strong> Leads</span>
                         <span><strong>{activeStats.closes}</strong> Closes</span>
                       </div>
+                      <div className="dityy-leads-head">
+                        <strong>Latest leads</strong>
+                        <button type="button" className="dityy-secondary" onClick={exportActiveLeads} disabled={!activeLeads.length}>
+                          Export CSV
+                        </button>
+                      </div>
+                      <div className="dityy-leads-table">
+                        {activeLeads.length === 0 ? (
+                          <p>No leads collected yet.</p>
+                        ) : (
+                          activeLeads.slice(0, 12).map((lead) => (
+                            <div key={lead.id} className="dityy-lead-row">
+                              <span>{lead.email || "No email"}</span>
+                              <span>{lead.phone || "No phone"}</span>
+                              <small>{new Date(lead.createdAt).toLocaleString()}</small>
+                            </div>
+                          ))
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -862,6 +996,23 @@ export default function Index() {
                       <div>
                         <strong>{activePopup.title || "Your headline goes here"}</strong>
                         <p>{activePopup.body || "Your description goes here"}</p>
+                        {activePopup.campaignType === "multi_announcement" && activePopup.messages.length > 0 && (
+                          <div className="dityy-preview-messages">
+                            {activePopup.messages.slice(0, 3).map((message) => (
+                              <span key={message}>{message}</span>
+                            ))}
+                          </div>
+                        )}
+                        {activePopup.campaignType === "countdown" && activePopup.countdownEndsAt && (
+                          <div className="dityy-preview-countdown">
+                            <span>Days</span>
+                            <strong>03</strong>
+                            <span>Hours</span>
+                            <strong>12</strong>
+                            <span>Min</span>
+                            <strong>45</strong>
+                          </div>
+                        )}
                         {(activePopup.collectEmail || activePopup.collectPhone) && (
                           <div className="dityy-preview-lead">
                             {activePopup.collectEmail && <input placeholder="Email" readOnly />}
@@ -1164,6 +1315,42 @@ const adminStyles = `
     font-size: 22px;
   }
 
+  .dityy-leads-head {
+    align-items: center;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .dityy-leads-table {
+    border: 1px solid #e1e1e1;
+    border-radius: 7px;
+    overflow: hidden;
+  }
+
+  .dityy-leads-table p {
+    color: #616161;
+    margin: 0;
+    padding: 12px;
+  }
+
+  .dityy-lead-row {
+    display: grid;
+    gap: 8px;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 120px) minmax(0, 150px);
+    padding: 10px 12px;
+  }
+
+  .dityy-lead-row + .dityy-lead-row {
+    border-top: 1px solid #ececec;
+  }
+
+  .dityy-lead-row span,
+  .dityy-lead-row small {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
   .dityy-preview__toolbar {
     align-items: center;
     background: #f6f6f6;
@@ -1255,6 +1442,37 @@ const adminStyles = `
   .dityy-preview-campaign p {
     color: inherit;
     margin: 0 0 14px;
+  }
+
+  .dityy-preview-messages,
+  .dityy-preview-countdown {
+    display: grid;
+    gap: 6px;
+    margin-bottom: 14px;
+  }
+
+  .dityy-preview-messages span {
+    background: rgba(0,0,0,.06);
+    border-radius: 5px;
+    padding: 6px 8px;
+  }
+
+  .dityy-preview-countdown {
+    align-items: center;
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .dityy-preview-countdown strong {
+    background: color-mix(in srgb, var(--preview-accent) 16%, transparent);
+    border-radius: 6px;
+    font-size: 20px;
+    padding: 8px;
+  }
+
+  .dityy-preview-countdown span {
+    color: inherit;
+    font-size: 11px;
+    opacity: .72;
   }
 
   .dityy-preview-campaign button {

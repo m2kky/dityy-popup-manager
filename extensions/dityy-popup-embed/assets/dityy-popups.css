@@ -169,9 +169,42 @@
   width: 100%;
 }
 
+.dityy-popup-card__countdown {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: 18px;
+}
+
+.dityy-popup-card__countdown span {
+  background: color-mix(in srgb, var(--dityy-popup-accent, #0f6b57) 12%, transparent);
+  border-radius: 7px;
+  display: grid;
+  gap: 2px;
+  padding: 10px 6px;
+  text-align: center;
+}
+
+.dityy-popup-card__countdown strong {
+  color: inherit;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.dityy-popup-card__countdown small {
+  color: inherit;
+  font-size: 11px;
+  opacity: .72;
+}
+
 .dityy-popup-card--bar .dityy-popup-card__button {
   margin-top: 0;
   width: auto;
+}
+
+.dityy-popup-card--bar .dityy-popup-card__countdown {
+  margin-top: 0;
+  min-width: 280px;
 }
 
 .dityy-popup-card__form {
