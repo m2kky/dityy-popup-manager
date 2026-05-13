@@ -17,6 +17,16 @@
   const pageType = root.getAttribute("data-page-type") || "";
   const path = root.getAttribute("data-path") || window.location.pathname;
   const cartSubtotal = (Number(root.getAttribute("data-cart-total") || 0) || 0) / 100;
+  const splitList = (value) =>
+    String(value || "")
+      .split(",")
+      .map((item) => item.trim().toLowerCase())
+      .filter(Boolean);
+  const productTags = splitList(root.getAttribute("data-product-tags"));
+  const collectionHandle = String(root.getAttribute("data-collection-handle") || "").trim().toLowerCase();
+  const customerTags = splitList(root.getAttribute("data-customer-tags"));
+  const country = String(root.getAttribute("data-country") || "").trim().toLowerCase();
+  const language = String(root.getAttribute("data-language") || "").trim().toLowerCase();
   let isModalOpen = false;
   let hasShownModal = false;
 
@@ -26,6 +36,7 @@
     const payload = JSON.stringify({
       popupId: popup.id,
       type,
+      variant: popup.variant || "a",
       path,
       pageType,
       referrer: document.referrer || "",
@@ -91,6 +102,33 @@
     return true;
   };
 
+  const listRuleMatches = (rule, values) => {
+    const rules = splitList(rule);
+    if (!rules.length) return true;
+    return rules.some((item) => values.includes(item));
+  };
+
+  const matchesAdvancedRules = (popup) => {
+    if (!listRuleMatches(popup.productTags, productTags)) return false;
+    if (!listRuleMatches(popup.customerTags, customerTags)) return false;
+
+    const collectionRules = splitList(popup.collectionHandles);
+    if (collectionRules.length && !collectionRules.includes(collectionHandle)) return false;
+
+    const countryRules = splitList(popup.countries);
+    if (countryRules.length && !countryRules.includes(country)) return false;
+
+    const languageRules = splitList(popup.languages);
+    if (
+      languageRules.length &&
+      !languageRules.some((item) => language === item || language.startsWith(item + "-"))
+    ) {
+      return false;
+    }
+
+    return true;
+  };
+
   const storageKey = (popup) => "dityy-popup:" + popup.id;
 
   const canShowByFrequency = (popup) => {
@@ -120,12 +158,37 @@
     }
   };
 
+  const variantStorageKey = (popup) => "dityy-popup-variant:" + popup.id;
+
+  const withVariant = (popup) => {
+    if (!popup.abTestEnabled) return { ...popup, variant: "a" };
+
+    let variant = window.localStorage.getItem(variantStorageKey(popup));
+    if (variant !== "a" && variant !== "b") {
+      variant = Math.random() < 0.5 ? "a" : "b";
+      window.localStorage.setItem(variantStorageKey(popup), variant);
+    }
+
+    if (variant === "b") {
+      return {
+        ...popup,
+        variant,
+        title: popup.variantBTitle || popup.title,
+        body: popup.variantBBody || popup.body,
+        primaryLabel: popup.variantBPrimaryLabel || popup.primaryLabel,
+      };
+    }
+
+    return { ...popup, variant: "a" };
+  };
+
   const applyColors = (element, popup) => {
     element.style.setProperty("--dityy-popup-bg", popup.backgroundColor || "#ffffff");
     element.style.setProperty("--dityy-popup-text", popup.textColor || "#161616");
     element.style.setProperty("--dityy-popup-accent", popup.accentColor || "#0f6b57");
     element.style.setProperty("--dityy-popup-button", popup.buttonColor || "#111111");
     element.style.setProperty("--dityy-popup-radius", Math.max(0, Number(popup.borderRadius) || 8) + "px");
+    element.style.setProperty("--dityy-popup-spacing", Math.max(8, Number(popup.spacing) || 18) + "px");
   };
 
   const textNode = (tag, className, text) => {
@@ -161,7 +224,15 @@
 
   const buildCampaign = (popup, displayClass) => {
     const card = document.createElement("div");
-    card.className = "dityy-popup-card " + displayClass;
+    card.className =
+      "dityy-popup-card " +
+      displayClass +
+      " dityy-popup-card--template-" +
+      (popup.templateStyle || "clean") +
+      " dityy-popup-card--image-" +
+      (popup.imagePosition || "top") +
+      " dityy-popup-card--font-" +
+      (popup.fontFamily || "system");
     applyColors(card, popup);
 
     if (popup.imageUrl) {
@@ -245,6 +316,16 @@
         form.appendChild(input);
       }
 
+      const consentLabel = document.createElement("label");
+      consentLabel.className = "dityy-popup-card__consent";
+      const consentInput = document.createElement("input");
+      consentInput.name = "consent";
+      consentInput.type = "checkbox";
+      consentInput.required = true;
+      consentLabel.appendChild(consentInput);
+      consentLabel.appendChild(document.createTextNode(popup.privacyText || "I agree to receive updates."));
+      form.appendChild(consentLabel);
+
       const submit = document.createElement("button");
       submit.type = "submit";
       submit.textContent = popup.leadButtonLabel || "Send";
@@ -257,6 +338,7 @@
           name: String(data.get("name") || ""),
           email: String(data.get("email") || ""),
           phone: String(data.get("phone") || ""),
+          consent: data.get("consent") === "on",
         });
         form.replaceWith(textNode("p", "dityy-popup-card__success", popup.successMessage || "Thanks."));
 
@@ -364,8 +446,9 @@
   };
 
   const eligiblePopups = popups
-    .filter((popup) => popup && popup.enabled && matchesPage(popup) && matchesDevice(popup) && matchesCart(popup) && matchesSchedule(popup))
+    .filter((popup) => popup && popup.enabled && matchesPage(popup) && matchesDevice(popup) && matchesCart(popup) && matchesSchedule(popup) && matchesAdvancedRules(popup))
     .filter(canShowByFrequency)
+    .map(withVariant)
     .sort((first, second) => Number(second.priority || 0) - Number(first.priority || 0));
 
   if (!eligiblePopups.length) return;

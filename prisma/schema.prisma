@@ -37,6 +37,8 @@ model PopupEvent {
   id        String   @id @default(cuid())
   popupId   String
   type      String
+  variant   String?
+  action    String?
   path      String?
   pageType  String?
   referrer  String?
@@ -58,4 +60,10 @@ model PopupLead {
 
   @@index([popupId])
   @@index([createdAt])
+}
+
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
 }

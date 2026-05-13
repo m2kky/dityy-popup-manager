@@ -42,6 +42,29 @@
   overflow: hidden;
 }
 
+.dityy-popup-card--font-serif {
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+.dityy-popup-card--font-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.dityy-popup-card--template-dark {
+  border-color: rgba(255,255,255,.12);
+  box-shadow: 0 24px 80px rgba(0,0,0,.34);
+}
+
+.dityy-popup-card--template-minimal {
+  border-color: transparent;
+  box-shadow: 0 12px 35px rgba(17,17,17,.08);
+}
+
+.dityy-popup-card--template-coupon .dityy-popup-card__coupon {
+  background: color-mix(in srgb, var(--dityy-popup-accent, #0f6b57) 13%, transparent);
+  border-style: solid;
+}
+
 .dityy-popup-card--bar {
   align-items: center;
   border-radius: 0;
@@ -107,7 +130,46 @@
 }
 
 .dityy-popup-card__content {
-  padding: 34px 30px 30px;
+  padding: calc(var(--dityy-popup-spacing, 18px) + 16px) calc(var(--dityy-popup-spacing, 18px) + 12px) calc(var(--dityy-popup-spacing, 18px) + 12px);
+}
+
+.dityy-popup-card--image-left,
+.dityy-popup-card--image-right,
+.dityy-popup-card--template-split {
+  display: grid;
+  grid-template-columns: minmax(180px, .85fr) minmax(0, 1fr);
+}
+
+.dityy-popup-card--image-right {
+  grid-template-columns: minmax(0, 1fr) minmax(180px, .85fr);
+}
+
+.dityy-popup-card--image-right .dityy-popup-card__image {
+  order: 2;
+}
+
+.dityy-popup-card--image-left .dityy-popup-card__image,
+.dityy-popup-card--image-right .dityy-popup-card__image,
+.dityy-popup-card--template-split .dityy-popup-card__image {
+  height: 100%;
+  max-height: none;
+}
+
+.dityy-popup-card--image-background {
+  position: relative;
+}
+
+.dityy-popup-card--image-background .dityy-popup-card__image {
+  height: 100%;
+  inset: 0;
+  max-height: none;
+  opacity: .18;
+  position: absolute;
+}
+
+.dityy-popup-card--image-background .dityy-popup-card__content {
+  position: relative;
+  z-index: 1;
 }
 
 .dityy-popup-card--bar .dityy-popup-card__content {
@@ -247,6 +309,23 @@
   width: 100%;
 }
 
+.dityy-popup-card__consent {
+  align-items: flex-start;
+  color: inherit;
+  display: flex;
+  font-size: 12px;
+  gap: 8px;
+  line-height: 1.45;
+  opacity: .82;
+}
+
+.dityy-popup-card__consent input {
+  flex: 0 0 auto;
+  min-height: auto;
+  margin-top: 2px;
+  width: auto;
+}
+
 .dityy-popup-card--bar .dityy-popup-card__form {
   display: flex;
   margin-top: 0;
@@ -295,5 +374,11 @@
   .dityy-popup-card--bar .dityy-popup-card__form {
     display: grid;
     margin-top: 10px;
+  }
+
+  .dityy-popup-card--image-left,
+  .dityy-popup-card--image-right,
+  .dityy-popup-card--template-split {
+    display: block;
   }
 }

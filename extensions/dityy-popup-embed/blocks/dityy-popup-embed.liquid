@@ -1,6 +1,9 @@
 {{ 'dityy-popups.css' | asset_url | stylesheet_tag }}
 
 {%- assign dityy_popups_config = app.metafields.dityy_popups.config.value | default: '[]' -%}
+{%- assign dityy_product_tags = product.tags | join: ',' | default: '' -%}
+{%- assign dityy_collection_handle = collection.handle | default: '' -%}
+{%- assign dityy_customer_tags = customer.tags | join: ',' | default: '' -%}
 
 <div
   data-dityy-popups-root
@@ -8,6 +11,11 @@
   data-page-type="{{ request.page_type | escape }}"
   data-path="{{ request.path | escape }}"
   data-cart-total="{{ cart.total_price | default: 0 }}"
+  data-product-tags="{{ dityy_product_tags | escape }}"
+  data-collection-handle="{{ dityy_collection_handle | escape }}"
+  data-customer-tags="{{ dityy_customer_tags | escape }}"
+  data-country="{{ localization.country.iso_code | default: '' | escape }}"
+  data-language="{{ localization.language.iso_code | default: request.locale.iso_code | escape }}"
   data-events-url="https://popup.muhammedmekky.com/api/events"
 ></div>
 

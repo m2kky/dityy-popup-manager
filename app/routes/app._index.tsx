@@ -18,6 +18,7 @@ import { authenticate } from "../shopify.server";
 const POPUP_NAMESPACE = "dityy_popups";
 const POPUP_KEY = "config";
 const uploadDir = process.env.UPLOAD_DIR || "/data/uploads";
+const INTEGRATIONS_SETTING_KEY = "integrations";
 
 type CampaignType =
   | "announcement"
@@ -46,6 +47,18 @@ type PopupStats = {
   leads: number;
 };
 
+type DailyStat = {
+  date: string;
+  views: number;
+  clicks: number;
+  leads: number;
+};
+
+type VariantStats = {
+  a: PopupStats;
+  b: PopupStats;
+};
+
 type LeadRow = {
   id: string;
   popupId: string;
@@ -65,7 +78,9 @@ type PopupConfig = {
   title: string;
   body: string;
   messages: string[];
+  templateStyle: "clean" | "split" | "dark" | "coupon" | "minimal";
   imageUrl: string;
+  imagePosition: "top" | "left" | "right" | "background";
   primaryLabel: string;
   primaryUrl: string;
   couponCode: string;
@@ -75,6 +90,7 @@ type PopupConfig = {
   collectPhone: boolean;
   leadButtonLabel: string;
   successMessage: string;
+  privacyText: string;
   redirectToWhatsApp: boolean;
   whatsappNumber: string;
   whatsappMessage: string;
@@ -82,6 +98,11 @@ type PopupConfig = {
   urlContains: string;
   cartMinSubtotal: number;
   cartMaxSubtotal: number;
+  productTags: string;
+  collectionHandles: string;
+  customerTags: string;
+  countries: string;
+  languages: string;
   startsAt: string;
   endsAt: string;
   deviceMode: DeviceMode;
@@ -97,13 +118,31 @@ type PopupConfig = {
   accentColor: string;
   buttonColor: string;
   borderRadius: number;
+  fontFamily: "system" | "serif" | "mono";
+  spacing: number;
+  abTestEnabled: boolean;
+  variantBTitle: string;
+  variantBBody: string;
+  variantBPrimaryLabel: string;
 };
 
 type LoaderData = {
   appInstallationId: string;
   popups: PopupConfig[];
   stats: Record<string, PopupStats>;
+  variantStats: Record<string, VariantStats>;
+  dailyStats: Record<string, DailyStat[]>;
   leads: LeadRow[];
+  integrations: IntegrationConfig;
+};
+
+type IntegrationConfig = {
+  googleSheetsWebhookUrl: string;
+  klaviyoApiKey: string;
+  klaviyoListId: string;
+  mailchimpApiKey: string;
+  mailchimpServerPrefix: string;
+  mailchimpListId: string;
 };
 
 type ActionData =
@@ -254,7 +293,9 @@ const defaultPopup = (): PopupConfig => ({
   title: "Your headline goes here",
   body: "Use this space for a clear offer, message, or signup benefit.",
   messages: ["Your first announcement", "Your second announcement"],
+  templateStyle: "clean",
   imageUrl: "",
+  imagePosition: "top",
   primaryLabel: "Shop now",
   primaryUrl: "/collections/all",
   couponCode: "",
@@ -264,6 +305,7 @@ const defaultPopup = (): PopupConfig => ({
   collectPhone: false,
   leadButtonLabel: "Send",
   successMessage: "Thanks. We received your details.",
+  privacyText: "I agree to receive updates and accept the privacy policy.",
   redirectToWhatsApp: false,
   whatsappNumber: "",
   whatsappMessage: "Thanks for registering. We will contact you shortly.",
@@ -271,6 +313,11 @@ const defaultPopup = (): PopupConfig => ({
   urlContains: "",
   cartMinSubtotal: 0,
   cartMaxSubtotal: 0,
+  productTags: "",
+  collectionHandles: "",
+  customerTags: "",
+  countries: "",
+  languages: "",
   startsAt: "",
   endsAt: "",
   deviceMode: "all",
@@ -286,6 +333,12 @@ const defaultPopup = (): PopupConfig => ({
   accentColor: "#0f6b57",
   buttonColor: "#111111",
   borderRadius: 12,
+  fontFamily: "system",
+  spacing: 18,
+  abTestEnabled: false,
+  variantBTitle: "Your alternate headline",
+  variantBBody: "Use this alternate message for A/B testing.",
+  variantBPrimaryLabel: "Learn more",
 });
 
 const numberOrDefault = (value: unknown, fallback: number) => {
@@ -335,7 +388,9 @@ const parsePopups = (value: unknown): PopupConfig[] => {
       title: stringOrDefault(record.title, base.title),
       body: stringOrDefault(record.body, base.body),
       messages: stringArrayOrDefault(record.messages, base.messages),
+      templateStyle: enumValue(record.templateStyle, ["clean", "split", "dark", "coupon", "minimal"] as const, "clean"),
       imageUrl: stringOrDefault(record.imageUrl),
+      imagePosition: enumValue(record.imagePosition, ["top", "left", "right", "background"] as const, "top"),
       primaryLabel: stringOrDefault(record.primaryLabel, base.primaryLabel),
       primaryUrl: stringOrDefault(record.primaryUrl, base.primaryUrl),
       couponCode: stringOrDefault(record.couponCode),
@@ -345,6 +400,7 @@ const parsePopups = (value: unknown): PopupConfig[] => {
       collectPhone: booleanOrDefault(record.collectPhone),
       leadButtonLabel: stringOrDefault(record.leadButtonLabel, base.leadButtonLabel),
       successMessage: stringOrDefault(record.successMessage, base.successMessage),
+      privacyText: stringOrDefault(record.privacyText, base.privacyText),
       redirectToWhatsApp: booleanOrDefault(record.redirectToWhatsApp),
       whatsappNumber: stringOrDefault(record.whatsappNumber),
       whatsappMessage: stringOrDefault(record.whatsappMessage, base.whatsappMessage),
@@ -356,6 +412,11 @@ const parsePopups = (value: unknown): PopupConfig[] => {
       urlContains: stringOrDefault(record.urlContains),
       cartMinSubtotal: Math.max(0, numberOrDefault(record.cartMinSubtotal, 0)),
       cartMaxSubtotal: Math.max(0, numberOrDefault(record.cartMaxSubtotal, 0)),
+      productTags: stringOrDefault(record.productTags),
+      collectionHandles: stringOrDefault(record.collectionHandles),
+      customerTags: stringOrDefault(record.customerTags),
+      countries: stringOrDefault(record.countries),
+      languages: stringOrDefault(record.languages),
       startsAt: stringOrDefault(record.startsAt),
       endsAt: stringOrDefault(record.endsAt),
       deviceMode: enumValue(record.deviceMode, ["all", "desktop", "mobile"] as const, "all"),
@@ -371,6 +432,12 @@ const parsePopups = (value: unknown): PopupConfig[] => {
       accentColor: stringOrDefault(record.accentColor, base.accentColor),
       buttonColor: stringOrDefault(record.buttonColor, base.buttonColor),
       borderRadius: Math.min(32, Math.max(0, numberOrDefault(record.borderRadius, base.borderRadius))),
+      fontFamily: enumValue(record.fontFamily, ["system", "serif", "mono"] as const, "system"),
+      spacing: Math.min(40, Math.max(8, numberOrDefault(record.spacing, base.spacing))),
+      abTestEnabled: booleanOrDefault(record.abTestEnabled),
+      variantBTitle: stringOrDefault(record.variantBTitle, base.variantBTitle),
+      variantBBody: stringOrDefault(record.variantBBody, base.variantBBody),
+      variantBPrimaryLabel: stringOrDefault(record.variantBPrimaryLabel, base.variantBPrimaryLabel),
     };
   });
 };
@@ -380,6 +447,20 @@ const emptyStats = (): PopupStats => ({
   clicks: 0,
   closes: 0,
   leads: 0,
+});
+
+const emptyVariantStats = (): VariantStats => ({
+  a: emptyStats(),
+  b: emptyStats(),
+});
+
+const emptyIntegrations = (): IntegrationConfig => ({
+  googleSheetsWebhookUrl: "",
+  klaviyoApiKey: "",
+  klaviyoListId: "",
+  mailchimpApiKey: "",
+  mailchimpServerPrefix: "",
+  mailchimpListId: "",
 });
 
 const getAppUrl = (request: Request) =>
@@ -417,6 +498,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     _count: { _all: true },
   });
 
+  const eventVariantStats = await prisma.popupEvent.groupBy({
+    by: ["popupId", "type", "variant"],
+    _count: { _all: true },
+  });
+
   const stats = eventStats.reduce<Record<string, PopupStats>>((acc, item) => {
     acc[item.popupId] ||= emptyStats();
     if (item.type === "view") acc[item.popupId].views = item._count._all;
@@ -426,15 +512,67 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     return acc;
   }, {});
 
+  const variantStats = eventVariantStats.reduce<Record<string, VariantStats>>((acc, item) => {
+    acc[item.popupId] ||= emptyVariantStats();
+    const variant = item.variant === "b" ? "b" : "a";
+    if (item.type === "view") acc[item.popupId][variant].views = item._count._all;
+    if (item.type === "click") acc[item.popupId][variant].clicks = item._count._all;
+    if (item.type === "lead") acc[item.popupId][variant].leads = item._count._all;
+    if (item.type === "close") acc[item.popupId][variant].closes = item._count._all;
+    return acc;
+  }, {});
+
+  const recentEvents = await prisma.popupEvent.findMany({
+    where: {
+      createdAt: {
+        gte: new Date(Date.now() - 13 * 24 * 60 * 60 * 1000),
+      },
+    },
+    select: {
+      popupId: true,
+      type: true,
+      createdAt: true,
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const dailyStats = recentEvents.reduce<Record<string, DailyStat[]>>((acc, event) => {
+    const date = event.createdAt.toISOString().slice(0, 10);
+    acc[event.popupId] ||= [];
+    let row = acc[event.popupId].find((item) => item.date === date);
+    if (!row) {
+      row = { date, views: 0, clicks: 0, leads: 0 };
+      acc[event.popupId].push(row);
+    }
+    if (event.type === "view") row.views += 1;
+    if (event.type === "click") row.clicks += 1;
+    if (event.type === "lead") row.leads += 1;
+    return acc;
+  }, {});
+
   const leads = await prisma.popupLead.findMany({
     orderBy: { createdAt: "desc" },
     take: 100,
   });
 
+  const integrationSetting = await prisma.appSetting.findUnique({
+    where: { key: INTEGRATIONS_SETTING_KEY },
+  });
+  let integrations = emptyIntegrations();
+  if (integrationSetting) {
+    try {
+      integrations = { ...integrations, ...JSON.parse(integrationSetting.value) };
+    } catch {
+      integrations = emptyIntegrations();
+    }
+  }
+
   return {
     appInstallationId: appInstallation.id,
     popups,
     stats,
+    variantStats,
+    dailyStats,
     leads: leads.map((lead) => ({
       id: lead.id,
       popupId: lead.popupId,
@@ -444,6 +582,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       path: lead.path,
       createdAt: lead.createdAt.toISOString(),
     })),
+    integrations,
   } satisfies LoaderData;
 };
 
@@ -493,15 +632,18 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   const payload = formData.get("payload");
+  const integrationsPayload = formData.get("integrations");
   const appInstallationId = formData.get("appInstallationId");
 
-  if (typeof payload !== "string" || typeof appInstallationId !== "string") {
+  if (typeof payload !== "string" || typeof integrationsPayload !== "string" || typeof appInstallationId !== "string") {
     return { ok: false, error: "Missing popup data." } satisfies ActionData;
   }
 
   let popups: PopupConfig[];
+  let integrations: IntegrationConfig;
   try {
     popups = parsePopups(JSON.parse(payload));
+    integrations = { ...emptyIntegrations(), ...JSON.parse(integrationsPayload) };
   } catch {
     return { ok: false, error: "Popup data is not valid JSON." } satisfies ActionData;
   }
@@ -545,6 +687,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     } satisfies ActionData;
   }
 
+  await prisma.appSetting.upsert({
+    where: { key: INTEGRATIONS_SETTING_KEY },
+    create: {
+      key: INTEGRATIONS_SETTING_KEY,
+      value: JSON.stringify(integrations),
+    },
+    update: {
+      value: JSON.stringify(integrations),
+    },
+  });
+
   return { ok: true, intent: "save", popups } satisfies ActionData;
 };
 
@@ -554,21 +707,37 @@ export default function Index() {
   const uploadFetcher = useFetcher<typeof action>();
   const shopify = useAppBridge();
   const [popups, setPopups] = useState<PopupConfig[]>(loaderData.popups);
+  const [integrations, setIntegrations] = useState<IntegrationConfig>(loaderData.integrations);
   const [activeId, setActiveId] = useState<string | null>(loaderData.popups[0]?.id ?? null);
   const [step, setStep] = useState<"type" | "display" | "editor">(
     loaderData.popups.length ? "editor" : "type",
   );
-  const [activePanel, setActivePanel] = useState<"content" | "style" | "targeting" | "automation" | "data">("content");
+  const [activePanel, setActivePanel] = useState<"content" | "style" | "targeting" | "automation" | "data" | "integrations">("content");
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "mobile">("desktop");
+  const [previewMode, setPreviewMode] = useState<"product" | "cart">("product");
+  const [leadSearch, setLeadSearch] = useState("");
+  const [leadDateFrom, setLeadDateFrom] = useState("");
+  const [leadDateTo, setLeadDateTo] = useState("");
 
   const enabledCount = useMemo(() => popups.filter((popup) => popup.enabled).length, [popups]);
   const activePopup = popups.find((popup) => popup.id === activeId) ?? null;
   const activeStats = activePopup ? loaderData.stats[activePopup.id] || emptyStats() : emptyStats();
   const activeLeads = activePopup
-    ? loaderData.leads.filter((lead) => lead.popupId === activePopup.id)
+    ? loaderData.leads
+        .filter((lead) => lead.popupId === activePopup.id)
+        .filter((lead) => {
+          const search = leadSearch.trim().toLowerCase();
+          const createdAt = lead.createdAt.slice(0, 10);
+          if (search && !`${lead.name || ""} ${lead.email || ""} ${lead.phone || ""}`.toLowerCase().includes(search)) return false;
+          if (leadDateFrom && createdAt < leadDateFrom) return false;
+          if (leadDateTo && createdAt > leadDateTo) return false;
+          return true;
+        })
     : [];
   const activeCtr = activeStats.views ? Math.round((activeStats.clicks / activeStats.views) * 1000) / 10 : 0;
   const activeLeadRate = activeStats.views ? Math.round((activeStats.leads / activeStats.views) * 1000) / 10 : 0;
+  const activeVariantStats = activePopup ? loaderData.variantStats[activePopup.id] || emptyVariantStats() : emptyVariantStats();
+  const activeDailyStats = activePopup ? loaderData.dailyStats[activePopup.id] || [] : [];
   const isSaving = saveFetcher.state !== "idle";
   const isUploading = uploadFetcher.state !== "idle";
 
@@ -597,6 +766,13 @@ export default function Index() {
     setPopups((current) =>
       current.map((popup) => (popup.id === id ? { ...popup, [key]: value } : popup)),
     );
+  };
+
+  const updateIntegration = <Key extends keyof IntegrationConfig>(
+    key: Key,
+    value: IntegrationConfig[Key],
+  ) => {
+    setIntegrations((current) => ({ ...current, [key]: value }));
   };
 
   const createCampaign = (campaignType: CampaignType, displayType: DisplayType = "popup") => {
@@ -661,6 +837,7 @@ export default function Index() {
       {
         intent: "save",
         payload: JSON.stringify(popups),
+        integrations: JSON.stringify(integrations),
         appInstallationId: loaderData.appInstallationId,
       },
       { method: "POST" },
@@ -711,6 +888,7 @@ export default function Index() {
         "--preview-accent": activePopup.accentColor,
         "--preview-button": activePopup.buttonColor,
         "--preview-radius": `${activePopup.borderRadius}px`,
+        "--preview-spacing": `${activePopup.spacing}px`,
       } as CSSProperties)
     : undefined;
 
@@ -843,6 +1021,7 @@ export default function Index() {
                       ["targeting", "Targeting"],
                       ["automation", "Automation"],
                       ["data", "Data"],
+                      ["integrations", "Integrations"],
                     ].map(([id, label]) => (
                       <button
                         key={id}
@@ -949,12 +1128,43 @@ export default function Index() {
                       </div>
                       <div className="dityy-field-grid">
                         <label>
+                          Template
+                          <select value={activePopup.templateStyle} onChange={(event) => updatePopup(activePopup.id, "templateStyle", event.currentTarget.value as PopupConfig["templateStyle"])}>
+                            <option value="clean">Clean</option>
+                            <option value="split">Split image</option>
+                            <option value="dark">Dark editorial</option>
+                            <option value="coupon">Coupon focus</option>
+                            <option value="minimal">Minimal</option>
+                          </select>
+                        </label>
+                        <label>
                           Display type
                           <select value={activePopup.displayType} onChange={(event) => updatePopup(activePopup.id, "displayType", event.currentTarget.value as DisplayType)}>
                             <option value="popup">Popup</option>
                             <option value="bar">Bar</option>
                             <option value="embed">Embed</option>
                           </select>
+                        </label>
+                        <label>
+                          Image position
+                          <select value={activePopup.imagePosition} onChange={(event) => updatePopup(activePopup.id, "imagePosition", event.currentTarget.value as PopupConfig["imagePosition"])}>
+                            <option value="top">Top</option>
+                            <option value="left">Left</option>
+                            <option value="right">Right</option>
+                            <option value="background">Background</option>
+                          </select>
+                        </label>
+                        <label>
+                          Font
+                          <select value={activePopup.fontFamily} onChange={(event) => updatePopup(activePopup.id, "fontFamily", event.currentTarget.value as PopupConfig["fontFamily"])}>
+                            <option value="system">System</option>
+                            <option value="serif">Serif</option>
+                            <option value="mono">Mono</option>
+                          </select>
+                        </label>
+                        <label>
+                          Spacing
+                          <input type="number" min={8} max={40} value={activePopup.spacing} onChange={(event) => updatePopup(activePopup.id, "spacing", Number(event.currentTarget.value))} />
                         </label>
                         <label>
                           Position
@@ -1024,6 +1234,26 @@ export default function Index() {
                           Cart subtotal to
                           <input type="number" min={0} value={activePopup.cartMaxSubtotal} onChange={(event) => updatePopup(activePopup.id, "cartMaxSubtotal", Number(event.currentTarget.value))} />
                         </label>
+                        <label>
+                          Product tags
+                          <input value={activePopup.productTags} placeholder="protein, keto" onChange={(event) => updatePopup(activePopup.id, "productTags", event.currentTarget.value)} />
+                        </label>
+                        <label>
+                          Collection handles
+                          <input value={activePopup.collectionHandles} placeholder="snacks, offers" onChange={(event) => updatePopup(activePopup.id, "collectionHandles", event.currentTarget.value)} />
+                        </label>
+                        <label>
+                          Customer tags
+                          <input value={activePopup.customerTags} placeholder="vip, wholesale" onChange={(event) => updatePopup(activePopup.id, "customerTags", event.currentTarget.value)} />
+                        </label>
+                        <label>
+                          Countries
+                          <input value={activePopup.countries} placeholder="EG, SA" onChange={(event) => updatePopup(activePopup.id, "countries", event.currentTarget.value.toUpperCase())} />
+                        </label>
+                        <label>
+                          Languages
+                          <input value={activePopup.languages} placeholder="ar, en" onChange={(event) => updatePopup(activePopup.id, "languages", event.currentTarget.value.toLowerCase())} />
+                        </label>
                       </div>
                     </div>
                   )}
@@ -1068,6 +1298,34 @@ export default function Index() {
                           <input type="datetime-local" value={activePopup.endsAt} onChange={(event) => updatePopup(activePopup.id, "endsAt", event.currentTarget.value)} />
                         </label>
                       </div>
+                      <label className="dityy-check">
+                        <input type="checkbox" checked={activePopup.abTestEnabled} onChange={(event) => updatePopup(activePopup.id, "abTestEnabled", event.currentTarget.checked)} />
+                        Enable A/B test
+                      </label>
+                      {activePopup.abTestEnabled && (
+                        <>
+                          <div className="dityy-field-grid">
+                            <label>
+                              Variant B headline
+                              <input dir="auto" value={activePopup.variantBTitle} onChange={(event) => updatePopup(activePopup.id, "variantBTitle", event.currentTarget.value)} />
+                            </label>
+                            <label>
+                              Variant B button
+                              <input dir="auto" value={activePopup.variantBPrimaryLabel} onChange={(event) => updatePopup(activePopup.id, "variantBPrimaryLabel", event.currentTarget.value)} />
+                            </label>
+                          </div>
+                          <label>
+                            Variant B description
+                            <textarea dir="auto" rows={3} value={activePopup.variantBBody} onChange={(event) => updatePopup(activePopup.id, "variantBBody", event.currentTarget.value)} />
+                          </label>
+                          <div className="dityy-ab-grid">
+                            <span><strong>{activeVariantStats.a.views}</strong> A views</span>
+                            <span><strong>{activeVariantStats.a.leads}</strong> A leads</span>
+                            <span><strong>{activeVariantStats.b.views}</strong> B views</span>
+                            <span><strong>{activeVariantStats.b.leads}</strong> B leads</span>
+                          </div>
+                        </>
+                      )}
                     </div>
                   )}
 
@@ -1095,6 +1353,15 @@ export default function Index() {
                           <input value={activePopup.successMessage} onChange={(event) => updatePopup(activePopup.id, "successMessage", event.currentTarget.value)} />
                         </label>
                       </div>
+                      <label>
+                        Privacy consent text
+                        <textarea
+                          dir="auto"
+                          rows={3}
+                          value={activePopup.privacyText}
+                          onChange={(event) => updatePopup(activePopup.id, "privacyText", event.currentTarget.value)}
+                        />
+                      </label>
                       <label className="dityy-check">
                         <input type="checkbox" checked={activePopup.redirectToWhatsApp} onChange={(event) => updatePopup(activePopup.id, "redirectToWhatsApp", event.currentTarget.checked)} />
                         Open WhatsApp after lead submit
@@ -1117,11 +1384,41 @@ export default function Index() {
                         <span><strong>{activeCtr}%</strong> CTR</span>
                         <span><strong>{activeLeadRate}%</strong> Lead rate</span>
                       </div>
+                      <div className="dityy-chart">
+                        {activeDailyStats.length === 0 ? (
+                          <p>No chart data yet.</p>
+                        ) : (
+                          activeDailyStats.map((day) => {
+                            const maxValue = Math.max(1, ...activeDailyStats.map((item) => item.views + item.clicks + item.leads));
+                            const height = Math.max(8, ((day.views + day.clicks + day.leads) / maxValue) * 96);
+                            return (
+                              <span key={day.date} title={`${day.date}: ${day.views} views, ${day.clicks} clicks, ${day.leads} leads`}>
+                                <i style={{ height }} />
+                                <small>{day.date.slice(5)}</small>
+                              </span>
+                            );
+                          })
+                        )}
+                      </div>
                       <div className="dityy-leads-head">
                         <strong>Latest leads</strong>
                         <button type="button" className="dityy-secondary" onClick={exportActiveLeads} disabled={!activeLeads.length}>
                           Export CSV
                         </button>
+                      </div>
+                      <div className="dityy-field-grid">
+                        <label>
+                          Search leads
+                          <input value={leadSearch} placeholder="email, phone, name" onChange={(event) => setLeadSearch(event.currentTarget.value)} />
+                        </label>
+                        <label>
+                          From date
+                          <input type="date" value={leadDateFrom} onChange={(event) => setLeadDateFrom(event.currentTarget.value)} />
+                        </label>
+                        <label>
+                          To date
+                          <input type="date" value={leadDateTo} onChange={(event) => setLeadDateTo(event.currentTarget.value)} />
+                        </label>
                       </div>
                       <div className="dityy-leads-table">
                         {activeLeads.length === 0 ? (
@@ -1138,23 +1435,72 @@ export default function Index() {
                       </div>
                     </div>
                   )}
+
+                  {activePanel === "integrations" && (
+                    <div className="dityy-panel">
+                      <div className="dityy-integration-note">
+                        These keys stay server-side and are not sent to the storefront.
+                      </div>
+                      <label>
+                        Google Sheets webhook URL
+                        <input value={integrations.googleSheetsWebhookUrl} placeholder="https://script.google.com/..." onChange={(event) => updateIntegration("googleSheetsWebhookUrl", event.currentTarget.value)} />
+                      </label>
+                      <div className="dityy-field-grid">
+                        <label>
+                          Klaviyo private API key
+                          <input type="password" value={integrations.klaviyoApiKey} onChange={(event) => updateIntegration("klaviyoApiKey", event.currentTarget.value)} />
+                        </label>
+                        <label>
+                          Klaviyo list ID
+                          <input value={integrations.klaviyoListId} onChange={(event) => updateIntegration("klaviyoListId", event.currentTarget.value)} />
+                        </label>
+                        <label>
+                          Mailchimp API key
+                          <input type="password" value={integrations.mailchimpApiKey} onChange={(event) => updateIntegration("mailchimpApiKey", event.currentTarget.value)} />
+                        </label>
+                        <label>
+                          Mailchimp server prefix
+                          <input value={integrations.mailchimpServerPrefix} placeholder="us21" onChange={(event) => updateIntegration("mailchimpServerPrefix", event.currentTarget.value)} />
+                        </label>
+                        <label>
+                          Mailchimp list ID
+                          <input value={integrations.mailchimpListId} onChange={(event) => updateIntegration("mailchimpListId", event.currentTarget.value)} />
+                        </label>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="dityy-preview">
                   <div className="dityy-preview__toolbar">
                     <span>Live preview</span>
                     <div>
+                      <button type="button" className={previewMode === "product" ? "active" : ""} onClick={() => setPreviewMode("product")}>Product</button>
+                      <button type="button" className={previewMode === "cart" ? "active" : ""} onClick={() => setPreviewMode("cart")}>Cart</button>
                       <button type="button" className={previewDevice === "desktop" ? "active" : ""} onClick={() => setPreviewDevice("desktop")}>Desktop</button>
                       <button type="button" className={previewDevice === "mobile" ? "active" : ""} onClick={() => setPreviewDevice("mobile")}>Mobile</button>
                     </div>
                   </div>
                   <div className={`dityy-preview-stage dityy-preview-stage--${previewDevice}`}>
-                    <div className="dityy-preview-skeleton">
-                      <span />
-                      <span />
-                      <span />
-                    </div>
-                    <div className={`dityy-preview-campaign dityy-preview-campaign--${activePopup.displayType} dityy-preview-campaign--${activePopup.position}`} style={previewStyle}>
+                    {previewMode === "product" ? (
+                      <div className="dityy-preview-page dityy-preview-page--product">
+                        <div className="dityy-preview-media" />
+                        <div className="dityy-preview-copy">
+                          <span>Dietty product</span>
+                          <strong>Protein snack bundle</strong>
+                          <p>EGP 240.00</p>
+                          <button type="button">Add to cart</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="dityy-preview-page dityy-preview-page--cart">
+                        <strong>Your cart</strong>
+                        <span />
+                        <span />
+                        <button type="button">Checkout</button>
+                      </div>
+                    )}
+                    <div className={`dityy-preview-campaign dityy-preview-campaign--${activePopup.displayType} dityy-preview-campaign--${activePopup.position} dityy-preview-campaign--${activePopup.templateStyle} dityy-preview-campaign--image-${activePopup.imagePosition} dityy-preview-campaign--font-${activePopup.fontFamily}`} style={previewStyle}>
                       {activePopup.imageUrl && <img src={activePopup.imageUrl} alt="" />}
                       <div>
                         <strong>{activePopup.title || "Your headline goes here"}</strong>
@@ -1187,6 +1533,10 @@ export default function Index() {
                             {activePopup.collectName && <input placeholder="Name" readOnly />}
                             {activePopup.collectEmail && <input placeholder="Email" readOnly />}
                             {activePopup.collectPhone && <input placeholder="Phone" readOnly />}
+                            <label>
+                              <input type="checkbox" checked readOnly />
+                              <span>{activePopup.privacyText}</span>
+                            </label>
                           </div>
                         )}
                         {activePopup.primaryLabel && <button type="button">{activePopup.primaryLabel}</button>}
@@ -1207,20 +1557,22 @@ export default function Index() {
 
 const adminStyles = `
   .dityy-app-shell {
-    background: #f5f5f2;
+    background: #f3f4f0;
     display: grid;
     gap: 0;
-    grid-template-columns: 300px minmax(0, 1fr);
+    grid-template-columns: 288px minmax(0, 1fr);
     margin: -12px -16px -24px;
     min-height: calc(100vh - 68px);
   }
 
   .dityy-sidebar {
-    background: #101513;
-    border-right: 1px solid #202722;
+    background: #0d1512;
+    border-right: 1px solid rgba(255,255,255,.08);
     color: #f7f4ed;
     min-height: calc(100vh - 68px);
-    padding: 18px;
+    padding: 22px 18px;
+    position: sticky;
+    top: 0;
   }
 
   .dityy-sidebar__head,
@@ -1235,8 +1587,8 @@ const adminStyles = `
   .dityy-icon-button,
   .dityy-back {
     background: #fff;
-    border: 1px solid #c9c9c9;
-    border-radius: 7px;
+    border: 1px solid #d7d9d3;
+    border-radius: 8px;
     cursor: pointer;
     min-height: 34px;
     padding: 6px 12px;
@@ -1280,7 +1632,7 @@ const adminStyles = `
   .dityy-campaign-item {
     background: transparent;
     border: 1px solid transparent;
-    border-radius: 10px;
+    border-radius: 12px;
     color: #f7f4ed;
     cursor: pointer;
     display: block;
@@ -1291,9 +1643,10 @@ const adminStyles = `
   }
 
   .dityy-campaign-item--active {
-    background: rgba(255,255,255,.08);
-    border-color: rgba(255,255,255,.12);
-    box-shadow: inset 3px 0 0 #77c8a7;
+    background: #f7f4ed;
+    border-color: rgba(255,255,255,.18);
+    box-shadow: 0 14px 34px rgba(0,0,0,.24);
+    color: #0d1512;
   }
 
   .dityy-campaign-item span,
@@ -1312,17 +1665,32 @@ const adminStyles = `
     color: #aeb7b1;
   }
 
+  .dityy-sidebar .dityy-campaign-item--active small {
+    color: #506058;
+  }
+
   .dityy-main {
-    padding: 28px;
+    min-width: 0;
+    padding: 24px;
+  }
+
+  .dityy-main h2 {
+    letter-spacing: 0;
+    margin: 0;
+  }
+
+  .dityy-main p {
+    line-height: 1.5;
+    min-width: 0;
   }
 
   .dityy-card,
   .dityy-builder {
     background: #fff;
-    border: 1px solid #ddddd5;
-    border-radius: 14px;
-    box-shadow: 0 18px 55px rgba(16,21,19,.07);
-    padding: 24px;
+    border: 1px solid #dedfd8;
+    border-radius: 16px;
+    box-shadow: 0 22px 70px rgba(16,21,19,.08);
+    padding: 22px;
   }
 
   .dityy-option-grid,
@@ -1339,8 +1707,8 @@ const adminStyles = `
 
   .dityy-option-card,
   .dityy-display-card {
-    background: #fff;
-    border: 1px solid #d8d8d0;
+    background: #fffdfa;
+    border: 1px solid #dedfd8;
     border-radius: 14px;
     cursor: pointer;
     min-height: 112px;
@@ -1423,22 +1791,28 @@ const adminStyles = `
   .dityy-builder__grid {
     display: grid;
     gap: 18px;
-    grid-template-columns: minmax(360px, 480px) minmax(420px, 1fr);
+    grid-template-columns: minmax(520px, 1fr) minmax(420px, .84fr);
   }
 
   .dityy-editor,
   .dityy-preview {
     background: #fff;
-    border: 1px solid #deded6;
+    border: 1px solid #dedfd8;
     border-radius: 14px;
     overflow: hidden;
   }
 
+  .dityy-preview {
+    align-self: start;
+    position: sticky;
+    top: 16px;
+  }
+
   .dityy-tabs {
-    background: #faf9f5;
+    background: #f8f7f1;
     border-bottom: 1px solid #e4e1d8;
     display: flex;
-    gap: 4px;
+    gap: 6px;
     overflow-x: auto;
     padding: 8px;
   }
@@ -1449,6 +1823,7 @@ const adminStyles = `
     border: 0;
     border-radius: 6px;
     cursor: pointer;
+    flex: 0 0 auto;
     padding: 8px 10px;
   }
 
@@ -1474,7 +1849,7 @@ const adminStyles = `
 
   .dityy-color-grid,
   .dityy-stat-grid {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .dityy-panel label {
@@ -1486,8 +1861,8 @@ const adminStyles = `
   .dityy-panel input,
   .dityy-panel select,
   .dityy-panel textarea {
-    background: #fffdfa;
-    border: 1px solid #c9c7bd;
+    background: #fff;
+    border: 1px solid #d1d2cb;
     border-radius: 9px;
     box-sizing: border-box;
     display: block;
@@ -1520,14 +1895,70 @@ const adminStyles = `
   }
 
   .dityy-stat-grid span {
-    background: #f6f6f6;
-    border-radius: 7px;
+    background: #f6f8f4;
+    border: 1px solid #e3e8df;
+    border-radius: 9px;
     padding: 12px;
   }
 
   .dityy-stat-grid strong {
     display: block;
     font-size: 22px;
+  }
+
+  .dityy-ab-grid {
+    display: grid;
+    gap: 10px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .dityy-ab-grid span,
+  .dityy-integration-note {
+    background: #f4f7f2;
+    border: 1px solid #dce6d9;
+    border-radius: 9px;
+    padding: 11px;
+  }
+
+  .dityy-ab-grid strong {
+    display: block;
+    font-size: 20px;
+  }
+
+  .dityy-chart {
+    align-items: end;
+    border: 1px solid #e1ded4;
+    border-radius: 10px;
+    display: grid;
+    gap: 8px;
+    grid-template-columns: repeat(14, minmax(12px, 1fr));
+    min-height: 136px;
+    padding: 14px;
+  }
+
+  .dityy-chart p {
+    color: #6f756f;
+    grid-column: 1 / -1;
+    margin: 0;
+  }
+
+  .dityy-chart span {
+    align-items: center;
+    display: grid;
+    gap: 6px;
+    justify-items: center;
+  }
+
+  .dityy-chart i {
+    background: #77c8a7;
+    border-radius: 999px 999px 3px 3px;
+    display: block;
+    width: 100%;
+  }
+
+  .dityy-chart small {
+    color: #6f756f;
+    font-size: 10px;
   }
 
   .dityy-presets {
@@ -1591,10 +2022,10 @@ const adminStyles = `
 
   .dityy-preview-stage {
     background:
-      linear-gradient(135deg, rgba(119,200,167,.14), transparent 32%),
+      linear-gradient(135deg, rgba(119,200,167,.18), transparent 32%),
       #efeee8;
-    min-height: 620px;
-    padding: 38px;
+    min-height: 650px;
+    padding: 34px;
     position: relative;
   }
 
@@ -1604,19 +2035,59 @@ const adminStyles = `
     min-height: 680px;
   }
 
-  .dityy-preview-skeleton {
+  .dityy-preview-page {
     background: #fff;
     border: 1px solid #e1e1e1;
+    box-shadow: 0 12px 30px rgba(16,21,19,.06);
     min-height: 540px;
     padding: 28px;
   }
 
-  .dityy-preview-skeleton span {
+  .dityy-preview-page--product {
+    display: grid;
+    gap: 28px;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .dityy-preview-media,
+  .dityy-preview-page--cart span {
     background: #efefef;
+    border-radius: 10px;
     display: block;
-    height: 18px;
-    margin-bottom: 16px;
-    width: 70%;
+  }
+
+  .dityy-preview-media {
+    min-height: 300px;
+  }
+
+  .dityy-preview-copy span,
+  .dityy-preview-copy p {
+    color: #6f756f;
+  }
+
+  .dityy-preview-copy strong {
+    display: block;
+    font-size: 30px;
+    margin: 8px 0;
+  }
+
+  .dityy-preview-page button {
+    background: #111;
+    border: 0;
+    border-radius: 8px;
+    color: #fff;
+    min-height: 44px;
+    padding: 0 18px;
+  }
+
+  .dityy-preview-page--cart {
+    display: grid;
+    gap: 16px;
+  }
+
+  .dityy-preview-page--cart span {
+    display: block;
+    height: 74px;
   }
 
   .dityy-preview-campaign {
@@ -1626,12 +2097,68 @@ const adminStyles = `
     color: var(--preview-text);
     left: 50%;
     max-width: 420px;
-    padding: 18px;
+    padding: 0;
     position: absolute;
     text-align: center;
     top: 50%;
     transform: translate(-50%, -50%);
     width: calc(100% - 90px);
+  }
+
+  .dityy-preview-campaign > div {
+    padding: var(--preview-spacing);
+  }
+
+  .dityy-preview-campaign--font-serif {
+    font-family: Georgia, serif;
+  }
+
+  .dityy-preview-campaign--font-mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  .dityy-preview-campaign--dark {
+    box-shadow: 0 20px 60px rgba(16,21,19,.24);
+  }
+
+  .dityy-preview-campaign--minimal {
+    border-color: transparent;
+    box-shadow: none;
+  }
+
+  .dityy-preview-campaign--split,
+  .dityy-preview-campaign--image-left,
+  .dityy-preview-campaign--image-right {
+    align-items: center;
+    display: grid;
+    grid-template-columns: 140px 1fr;
+    text-align: left;
+  }
+
+  .dityy-preview-campaign--image-right {
+    grid-template-columns: 1fr 140px;
+  }
+
+  .dityy-preview-campaign--image-right img {
+    order: 2;
+  }
+
+  .dityy-preview-campaign--image-background {
+    overflow: hidden;
+  }
+
+  .dityy-preview-campaign--image-background img {
+    height: 100%;
+    inset: 0;
+    max-height: none;
+    opacity: .18;
+    position: absolute;
+    z-index: 0;
+  }
+
+  .dityy-preview-campaign--image-background > div {
+    position: relative;
+    z-index: 1;
   }
 
   .dityy-preview-campaign--bar {
@@ -1661,7 +2188,6 @@ const adminStyles = `
     max-height: 140px;
     object-fit: cover;
     width: 100%;
-    margin-bottom: 12px;
   }
 
   .dityy-preview-campaign strong {
@@ -1747,14 +2273,32 @@ const adminStyles = `
     padding: 8px 10px;
   }
 
+  .dityy-preview-lead label {
+    align-items: flex-start;
+    color: inherit;
+    display: flex;
+    font-size: 11px;
+    gap: 7px;
+    line-height: 1.35;
+    opacity: .76;
+    text-align: left;
+  }
+
+  .dityy-preview-lead label input {
+    min-height: auto;
+    width: auto;
+  }
+
   @media (max-width: 1100px) {
     .dityy-app-shell,
     .dityy-builder__grid {
       grid-template-columns: 1fr;
     }
 
-    .dityy-sidebar {
+    .dityy-sidebar,
+    .dityy-preview {
       min-height: auto;
+      position: static;
     }
   }
 `;
