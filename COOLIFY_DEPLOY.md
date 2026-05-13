@@ -23,7 +23,7 @@ SCOPES=
 Get the Shopify values locally:
 
 ```powershell
-shopify app env show --config dityy-popup-manager-by-mekky
+shopify app env show --config dityy-popup-manager
 ```
 
 ## Shopify Deploy
@@ -31,7 +31,7 @@ shopify app env show --config dityy-popup-manager-by-mekky
 After the Coolify app is live and `https://popup.muhammedmekky.com/healthz` returns `ok`, deploy the app configuration and extension:
 
 ```powershell
-shopify app deploy --config dityy-popup-manager-by-mekky
+shopify app deploy --config dityy-popup-manager --allow-updates
 ```
 
 Then install the app on the store and enable the theme app embed:
