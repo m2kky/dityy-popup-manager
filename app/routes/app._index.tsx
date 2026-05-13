@@ -68,6 +68,7 @@ type PopupConfig = {
   imageUrl: string;
   primaryLabel: string;
   primaryUrl: string;
+  couponCode: string;
   countdownEndsAt: string;
   collectName: boolean;
   collectEmail: boolean;
@@ -81,6 +82,8 @@ type PopupConfig = {
   urlContains: string;
   cartMinSubtotal: number;
   cartMaxSubtotal: number;
+  startsAt: string;
+  endsAt: string;
   deviceMode: DeviceMode;
   trigger: PopupTrigger;
   delaySeconds: number;
@@ -93,6 +96,7 @@ type PopupConfig = {
   textColor: string;
   accentColor: string;
   buttonColor: string;
+  borderRadius: number;
 };
 
 type LoaderData = {
@@ -186,6 +190,8 @@ const popupPresets: PopupPreset[] = [
       textColor: "#ffffff",
       accentColor: "#f3d35b",
       buttonColor: "#f3d35b",
+      couponCode: "DIET10",
+      borderRadius: 16,
     },
   },
   {
@@ -200,6 +206,7 @@ const popupPresets: PopupPreset[] = [
       collectPhone: true,
       leadButtonLabel: "سجلني",
       successMessage: "تم التسجيل. هنتواصل معاك قريب.",
+      borderRadius: 18,
     },
   },
   {
@@ -214,6 +221,7 @@ const popupPresets: PopupPreset[] = [
       leadButtonLabel: "كلمنا على واتساب",
       redirectToWhatsApp: true,
       whatsappMessage: "أهلا، محتاج مساعدة في اختيار منتجات مناسبة من دايتي.",
+      buttonColor: "#18a558",
     },
   },
   {
@@ -227,6 +235,9 @@ const popupPresets: PopupPreset[] = [
       body: "كمل طلبك واستفيد من الشحن المجاني.",
       primaryLabel: "تسوق الآن",
       cartMaxSubtotal: 1799,
+      backgroundColor: "#111827",
+      textColor: "#ffffff",
+      buttonColor: "#ffffff",
     },
   },
 ];
@@ -246,6 +257,7 @@ const defaultPopup = (): PopupConfig => ({
   imageUrl: "",
   primaryLabel: "Shop now",
   primaryUrl: "/collections/all",
+  couponCode: "",
   countdownEndsAt: "",
   collectName: false,
   collectEmail: false,
@@ -259,6 +271,8 @@ const defaultPopup = (): PopupConfig => ({
   urlContains: "",
   cartMinSubtotal: 0,
   cartMaxSubtotal: 0,
+  startsAt: "",
+  endsAt: "",
   deviceMode: "all",
   trigger: "delay",
   delaySeconds: 5,
@@ -271,6 +285,7 @@ const defaultPopup = (): PopupConfig => ({
   textColor: "#161616",
   accentColor: "#0f6b57",
   buttonColor: "#111111",
+  borderRadius: 12,
 });
 
 const numberOrDefault = (value: unknown, fallback: number) => {
@@ -323,6 +338,7 @@ const parsePopups = (value: unknown): PopupConfig[] => {
       imageUrl: stringOrDefault(record.imageUrl),
       primaryLabel: stringOrDefault(record.primaryLabel, base.primaryLabel),
       primaryUrl: stringOrDefault(record.primaryUrl, base.primaryUrl),
+      couponCode: stringOrDefault(record.couponCode),
       countdownEndsAt: stringOrDefault(record.countdownEndsAt),
       collectName: booleanOrDefault(record.collectName),
       collectEmail: booleanOrDefault(record.collectEmail),
@@ -340,6 +356,8 @@ const parsePopups = (value: unknown): PopupConfig[] => {
       urlContains: stringOrDefault(record.urlContains),
       cartMinSubtotal: Math.max(0, numberOrDefault(record.cartMinSubtotal, 0)),
       cartMaxSubtotal: Math.max(0, numberOrDefault(record.cartMaxSubtotal, 0)),
+      startsAt: stringOrDefault(record.startsAt),
+      endsAt: stringOrDefault(record.endsAt),
       deviceMode: enumValue(record.deviceMode, ["all", "desktop", "mobile"] as const, "all"),
       trigger: enumValue(record.trigger, ["delay", "scroll", "exit"] as const, "delay"),
       delaySeconds: Math.max(0, numberOrDefault(record.delaySeconds, 5)),
@@ -352,6 +370,7 @@ const parsePopups = (value: unknown): PopupConfig[] => {
       textColor: stringOrDefault(record.textColor, base.textColor),
       accentColor: stringOrDefault(record.accentColor, base.accentColor),
       buttonColor: stringOrDefault(record.buttonColor, base.buttonColor),
+      borderRadius: Math.min(32, Math.max(0, numberOrDefault(record.borderRadius, base.borderRadius))),
     };
   });
 };
@@ -691,6 +710,7 @@ export default function Index() {
         "--preview-text": activePopup.textColor,
         "--preview-accent": activePopup.accentColor,
         "--preview-button": activePopup.buttonColor,
+        "--preview-radius": `${activePopup.borderRadius}px`,
       } as CSSProperties)
     : undefined;
 
@@ -703,10 +723,17 @@ export default function Index() {
       <div className="dityy-app-shell">
         <aside className="dityy-sidebar">
           <div className="dityy-sidebar__head">
-            <span>{popups.length} campaigns</span>
+            <div>
+              <strong>Campaigns</strong>
+              <span>{popups.length} total · {enabledCount} live</span>
+            </div>
             <button type="button" className="dityy-icon-button" onClick={() => setStep("type")}>
               +
             </button>
+          </div>
+          <div className="dityy-sidebar__metrics">
+            <span><strong>{Object.values(loaderData.stats).reduce((total, item) => total + item.views, 0)}</strong> views</span>
+            <span><strong>{Object.values(loaderData.stats).reduce((total, item) => total + item.leads, 0)}</strong> leads</span>
           </div>
           {popups.map((popup) => (
             <button
@@ -720,7 +747,7 @@ export default function Index() {
             >
               <span>{popup.name || "Untitled campaign"}</span>
               <small>
-                {popup.enabled ? "Enabled" : "Disabled"} · {popup.displayType}
+                {popup.enabled ? "Live" : "Paused"} · {popup.displayType} · {popup.campaignType.replace("_", " ")}
               </small>
             </button>
           ))}
@@ -897,6 +924,10 @@ export default function Index() {
                         </label>
                       </div>
                       <label>
+                        Coupon code
+                        <input value={activePopup.couponCode} placeholder="DIET10" onChange={(event) => updatePopup(activePopup.id, "couponCode", event.currentTarget.value.toUpperCase())} />
+                      </label>
+                      <label>
                         Image URL
                         <input value={activePopup.imageUrl} onChange={(event) => updatePopup(activePopup.id, "imageUrl", event.currentTarget.value)} />
                       </label>
@@ -950,6 +981,10 @@ export default function Index() {
                         <label>
                           Button
                           <input type="color" value={activePopup.buttonColor} onChange={(event) => updatePopup(activePopup.id, "buttonColor", event.currentTarget.value)} />
+                        </label>
+                        <label>
+                          Radius
+                          <input type="number" min={0} max={32} value={activePopup.borderRadius} onChange={(event) => updatePopup(activePopup.id, "borderRadius", Number(event.currentTarget.value))} />
                         </label>
                       </div>
                     </div>
@@ -1023,6 +1058,14 @@ export default function Index() {
                         <label>
                           Days
                           <input type="number" min={1} value={activePopup.frequencyDays} onChange={(event) => updatePopup(activePopup.id, "frequencyDays", Number(event.currentTarget.value))} />
+                        </label>
+                        <label>
+                          Starts at
+                          <input type="datetime-local" value={activePopup.startsAt} onChange={(event) => updatePopup(activePopup.id, "startsAt", event.currentTarget.value)} />
+                        </label>
+                        <label>
+                          Ends at
+                          <input type="datetime-local" value={activePopup.endsAt} onChange={(event) => updatePopup(activePopup.id, "endsAt", event.currentTarget.value)} />
                         </label>
                       </div>
                     </div>
@@ -1133,6 +1176,12 @@ export default function Index() {
                             <strong>45</strong>
                           </div>
                         )}
+                        {activePopup.couponCode && (
+                          <div className="dityy-preview-coupon">
+                            <span>{activePopup.couponCode}</span>
+                            <small>Copy code</small>
+                          </div>
+                        )}
                         {(activePopup.collectName || activePopup.collectEmail || activePopup.collectPhone) && (
                           <div className="dityy-preview-lead">
                             {activePopup.collectName && <input placeholder="Name" readOnly />}
@@ -1158,17 +1207,20 @@ export default function Index() {
 
 const adminStyles = `
   .dityy-app-shell {
+    background: #f5f5f2;
     display: grid;
-    gap: 18px;
-    grid-template-columns: 280px minmax(0, 1fr);
-    margin: -12px -8px 0;
+    gap: 0;
+    grid-template-columns: 300px minmax(0, 1fr);
+    margin: -12px -16px -24px;
+    min-height: calc(100vh - 68px);
   }
 
   .dityy-sidebar {
-    background: #fff;
-    border-right: 1px solid #dedede;
-    min-height: calc(100vh - 86px);
-    padding: 14px;
+    background: #101513;
+    border-right: 1px solid #202722;
+    color: #f7f4ed;
+    min-height: calc(100vh - 68px);
+    padding: 18px;
   }
 
   .dityy-sidebar__head,
@@ -1190,10 +1242,46 @@ const adminStyles = `
     padding: 6px 12px;
   }
 
+  .dityy-sidebar__head span {
+    color: #aeb7b1;
+    display: block;
+    font-size: 12px;
+    margin-top: 4px;
+  }
+
+  .dityy-sidebar .dityy-icon-button {
+    background: #f7f4ed;
+    border-color: transparent;
+    color: #101513;
+    font-weight: 800;
+  }
+
+  .dityy-sidebar__metrics {
+    border-bottom: 1px solid rgba(255,255,255,.08);
+    border-top: 1px solid rgba(255,255,255,.08);
+    display: grid;
+    gap: 10px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    margin: 18px 0 8px;
+    padding: 14px 0;
+  }
+
+  .dityy-sidebar__metrics span {
+    color: #aeb7b1;
+    font-size: 12px;
+  }
+
+  .dityy-sidebar__metrics strong {
+    color: #f7f4ed;
+    display: block;
+    font-size: 24px;
+  }
+
   .dityy-campaign-item {
-    background: #fff;
+    background: transparent;
     border: 1px solid transparent;
-    border-radius: 8px;
+    border-radius: 10px;
+    color: #f7f4ed;
     cursor: pointer;
     display: block;
     margin-top: 10px;
@@ -1203,9 +1291,9 @@ const adminStyles = `
   }
 
   .dityy-campaign-item--active {
-    background: #f5f5f5;
-    border-color: #d8d8d8;
-    box-shadow: inset 3px 0 0 #111;
+    background: rgba(255,255,255,.08);
+    border-color: rgba(255,255,255,.12);
+    box-shadow: inset 3px 0 0 #77c8a7;
   }
 
   .dityy-campaign-item span,
@@ -1216,21 +1304,25 @@ const adminStyles = `
   .dityy-campaign-item small,
   .dityy-step-head p,
   .dityy-builder__top p {
-    color: #616161;
+    color: #6f756f;
     margin: 4px 0 0;
   }
 
+  .dityy-sidebar .dityy-campaign-item small {
+    color: #aeb7b1;
+  }
+
   .dityy-main {
-    padding: 18px 18px 40px 0;
+    padding: 28px;
   }
 
   .dityy-card,
   .dityy-builder {
     background: #fff;
-    border: 1px solid #dedede;
-    border-radius: 8px;
-    box-shadow: 0 1px 2px rgba(0,0,0,.04);
-    padding: 22px;
+    border: 1px solid #ddddd5;
+    border-radius: 14px;
+    box-shadow: 0 18px 55px rgba(16,21,19,.07);
+    padding: 24px;
   }
 
   .dityy-option-grid,
@@ -1248,8 +1340,8 @@ const adminStyles = `
   .dityy-option-card,
   .dityy-display-card {
     background: #fff;
-    border: 1px solid #cfcfcf;
-    border-radius: 8px;
+    border: 1px solid #d8d8d0;
+    border-radius: 14px;
     cursor: pointer;
     min-height: 112px;
     padding: 18px;
@@ -1262,8 +1354,8 @@ const adminStyles = `
   }
 
   .dityy-display-card--active {
-    background: #f1f1f1;
-    border-color: #111;
+    background: #eef8f1;
+    border-color: #77c8a7;
   }
 
   .dityy-option-card strong,
@@ -1336,14 +1428,15 @@ const adminStyles = `
 
   .dityy-editor,
   .dityy-preview {
-    border: 1px solid #dedede;
-    border-radius: 8px;
+    background: #fff;
+    border: 1px solid #deded6;
+    border-radius: 14px;
     overflow: hidden;
   }
 
   .dityy-tabs {
-    background: #f6f6f6;
-    border-bottom: 1px solid #dedede;
+    background: #faf9f5;
+    border-bottom: 1px solid #e4e1d8;
     display: flex;
     gap: 4px;
     overflow-x: auto;
@@ -1361,7 +1454,7 @@ const adminStyles = `
 
   .dityy-tabs button.active,
   .dityy-preview__toolbar button.active {
-    background: #111;
+    background: #101513;
     color: #fff;
   }
 
@@ -1393,8 +1486,9 @@ const adminStyles = `
   .dityy-panel input,
   .dityy-panel select,
   .dityy-panel textarea {
-    border: 1px solid #b8b8b8;
-    border-radius: 6px;
+    background: #fffdfa;
+    border: 1px solid #c9c7bd;
+    border-radius: 9px;
     box-sizing: border-box;
     display: block;
     font: inherit;
@@ -1488,15 +1582,17 @@ const adminStyles = `
 
   .dityy-preview__toolbar {
     align-items: center;
-    background: #f6f6f6;
-    border-bottom: 1px solid #dedede;
+    background: #faf9f5;
+    border-bottom: 1px solid #e4e1d8;
     display: flex;
     justify-content: space-between;
     padding: 10px 12px;
   }
 
   .dityy-preview-stage {
-    background: #f3f3f3;
+    background:
+      linear-gradient(135deg, rgba(119,200,167,.14), transparent 32%),
+      #efeee8;
     min-height: 620px;
     padding: 38px;
     position: relative;
@@ -1526,7 +1622,7 @@ const adminStyles = `
   .dityy-preview-campaign {
     background: var(--preview-bg);
     border: 1px solid rgba(0,0,0,.12);
-    border-radius: 8px;
+    border-radius: var(--preview-radius);
     color: var(--preview-text);
     left: 50%;
     max-width: 420px;
@@ -1607,6 +1703,25 @@ const adminStyles = `
   .dityy-preview-countdown span {
     color: inherit;
     font-size: 11px;
+    opacity: .72;
+  }
+
+  .dityy-preview-coupon {
+    align-items: center;
+    border: 1px dashed color-mix(in srgb, var(--preview-accent) 70%, transparent);
+    border-radius: 9px;
+    display: flex;
+    justify-content: space-between;
+    margin: 0 0 14px;
+    padding: 9px 11px;
+  }
+
+  .dityy-preview-coupon span {
+    font-weight: 800;
+    letter-spacing: .08em;
+  }
+
+  .dityy-preview-coupon small {
     opacity: .72;
   }
 

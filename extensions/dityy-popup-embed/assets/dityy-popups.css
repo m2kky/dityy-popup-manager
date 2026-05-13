@@ -35,7 +35,7 @@
 .dityy-popup-card {
   background: var(--dityy-popup-bg, #fff);
   border: 1px solid rgba(17, 17, 17, 0.16);
-  border-radius: 8px;
+  border-radius: var(--dityy-popup-radius, 8px);
   box-shadow: 0 22px 70px rgba(17, 17, 17, 0.24);
   color: var(--dityy-popup-text, #161616);
   direction: rtl;
@@ -167,6 +167,30 @@
 .dityy-popup-card__button {
   margin-top: 22px;
   width: 100%;
+}
+
+.dityy-popup-card__coupon {
+  align-items: center;
+  background: transparent;
+  border: 1px dashed color-mix(in srgb, var(--dityy-popup-accent, #0f6b57) 70%, transparent);
+  border-radius: 8px;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  justify-content: space-between;
+  margin-top: 16px;
+  padding: 10px 12px;
+  width: 100%;
+}
+
+.dityy-popup-card__coupon span {
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+
+.dityy-popup-card__coupon small {
+  opacity: .72;
 }
 
 .dityy-popup-card__countdown {

@@ -80,6 +80,17 @@
     return true;
   };
 
+  const matchesSchedule = (popup) => {
+    const now = Date.now();
+    const startsAt = popup.startsAt ? new Date(popup.startsAt).getTime() : 0;
+    const endsAt = popup.endsAt ? new Date(popup.endsAt).getTime() : 0;
+
+    if (startsAt && now < startsAt) return false;
+    if (endsAt && now > endsAt) return false;
+
+    return true;
+  };
+
   const storageKey = (popup) => "dityy-popup:" + popup.id;
 
   const canShowByFrequency = (popup) => {
@@ -114,6 +125,7 @@
     element.style.setProperty("--dityy-popup-text", popup.textColor || "#161616");
     element.style.setProperty("--dityy-popup-accent", popup.accentColor || "#0f6b57");
     element.style.setProperty("--dityy-popup-button", popup.buttonColor || "#111111");
+    element.style.setProperty("--dityy-popup-radius", Math.max(0, Number(popup.borderRadius) || 8) + "px");
   };
 
   const textNode = (tag, className, text) => {
@@ -188,6 +200,19 @@
       countdown.className = "dityy-popup-card__countdown";
       startCountdown(countdown, popup.countdownEndsAt);
       content.appendChild(countdown);
+    }
+
+    if (popup.couponCode) {
+      const coupon = document.createElement("button");
+      coupon.className = "dityy-popup-card__coupon";
+      coupon.type = "button";
+      coupon.innerHTML = "<span>" + popup.couponCode + "</span><small>Copy code</small>";
+      coupon.addEventListener("click", () => {
+        navigator.clipboard?.writeText(popup.couponCode).catch(function () {});
+        coupon.querySelector("small").textContent = "Copied";
+        track(popup, "click", { action: "coupon_copy" });
+      });
+      content.appendChild(coupon);
     }
 
     if (popup.collectName || popup.collectEmail || popup.collectPhone) {
@@ -339,7 +364,7 @@
   };
 
   const eligiblePopups = popups
-    .filter((popup) => popup && popup.enabled && matchesPage(popup) && matchesDevice(popup) && matchesCart(popup))
+    .filter((popup) => popup && popup.enabled && matchesPage(popup) && matchesDevice(popup) && matchesCart(popup) && matchesSchedule(popup))
     .filter(canShowByFrequency)
     .sort((first, second) => Number(second.priority || 0) - Number(first.priority || 0));
 
