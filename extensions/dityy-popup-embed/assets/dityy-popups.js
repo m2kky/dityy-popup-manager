@@ -190,9 +190,18 @@
       content.appendChild(countdown);
     }
 
-    if (popup.collectEmail || popup.collectPhone) {
+    if (popup.collectName || popup.collectEmail || popup.collectPhone) {
       const form = document.createElement("form");
       form.className = "dityy-popup-card__form";
+
+      if (popup.collectName) {
+        const input = document.createElement("input");
+        input.name = "name";
+        input.type = "text";
+        input.placeholder = "Name";
+        input.autocomplete = "name";
+        form.appendChild(input);
+      }
 
       if (popup.collectEmail) {
         const input = document.createElement("input");
@@ -220,10 +229,19 @@
         event.preventDefault();
         const data = new FormData(form);
         track(popup, "lead", {
+          name: String(data.get("name") || ""),
           email: String(data.get("email") || ""),
           phone: String(data.get("phone") || ""),
         });
         form.replaceWith(textNode("p", "dityy-popup-card__success", popup.successMessage || "Thanks."));
+
+        if (popup.redirectToWhatsApp && popup.whatsappNumber) {
+          const number = String(popup.whatsappNumber).replace(/\D/g, "");
+          const message = encodeURIComponent(popup.whatsappMessage || popup.title || "Hello");
+          window.setTimeout(() => {
+            window.open("https://wa.me/" + number + "?text=" + message, "_blank", "noopener");
+          }, 450);
+        }
       });
 
       content.appendChild(form);

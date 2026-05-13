@@ -69,10 +69,14 @@ type PopupConfig = {
   primaryLabel: string;
   primaryUrl: string;
   countdownEndsAt: string;
+  collectName: boolean;
   collectEmail: boolean;
   collectPhone: boolean;
   leadButtonLabel: string;
   successMessage: string;
+  redirectToWhatsApp: boolean;
+  whatsappNumber: string;
+  whatsappMessage: string;
   pageMode: PopupPageMode;
   urlContains: string;
   cartMinSubtotal: number;
@@ -163,6 +167,70 @@ const displayTypes: Array<{
   },
 ];
 
+type PopupPreset = {
+  id: string;
+  label: string;
+  patch: Partial<PopupConfig>;
+};
+
+const popupPresets: PopupPreset[] = [
+  {
+    id: "flash-offer",
+    label: "Flash offer",
+    patch: {
+      title: "عرض لفترة محدودة",
+      body: "خصم خاص على منتجات مختارة. اطلب قبل انتهاء العرض.",
+      primaryLabel: "تسوق العرض",
+      primaryUrl: "/collections/all",
+      backgroundColor: "#0f6b57",
+      textColor: "#ffffff",
+      accentColor: "#f3d35b",
+      buttonColor: "#f3d35b",
+    },
+  },
+  {
+    id: "lead-capture",
+    label: "Lead capture",
+    patch: {
+      campaignType: "email_signup",
+      title: "خليك أول واحد يعرف العروض",
+      body: "سيب بياناتك وهنبعتلك أحدث الخصومات والمنتجات الجديدة.",
+      collectName: true,
+      collectEmail: true,
+      collectPhone: true,
+      leadButtonLabel: "سجلني",
+      successMessage: "تم التسجيل. هنتواصل معاك قريب.",
+    },
+  },
+  {
+    id: "whatsapp-followup",
+    label: "WhatsApp follow-up",
+    patch: {
+      campaignType: "email_signup",
+      title: "محتاج مساعدة في اختيار المنتج؟",
+      body: "سيب رقمك وافتح واتساب مباشرة عشان نساعدك.",
+      collectName: true,
+      collectPhone: true,
+      leadButtonLabel: "كلمنا على واتساب",
+      redirectToWhatsApp: true,
+      whatsappMessage: "أهلا، محتاج مساعدة في اختيار منتجات مناسبة من دايتي.",
+    },
+  },
+  {
+    id: "free-shipping",
+    label: "Free shipping",
+    patch: {
+      campaignType: "free_shipping",
+      displayType: "bar",
+      position: "top",
+      title: "الشحن مجاني للطلبات فوق 1800 جنيه",
+      body: "كمل طلبك واستفيد من الشحن المجاني.",
+      primaryLabel: "تسوق الآن",
+      cartMaxSubtotal: 1799,
+    },
+  },
+];
+
 const defaultPopup = (): PopupConfig => ({
   id:
     typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -179,10 +247,14 @@ const defaultPopup = (): PopupConfig => ({
   primaryLabel: "Shop now",
   primaryUrl: "/collections/all",
   countdownEndsAt: "",
+  collectName: false,
   collectEmail: false,
   collectPhone: false,
   leadButtonLabel: "Send",
   successMessage: "Thanks. We received your details.",
+  redirectToWhatsApp: false,
+  whatsappNumber: "",
+  whatsappMessage: "Thanks for registering. We will contact you shortly.",
   pageMode: "all",
   urlContains: "",
   cartMinSubtotal: 0,
@@ -252,10 +324,14 @@ const parsePopups = (value: unknown): PopupConfig[] => {
       primaryLabel: stringOrDefault(record.primaryLabel, base.primaryLabel),
       primaryUrl: stringOrDefault(record.primaryUrl, base.primaryUrl),
       countdownEndsAt: stringOrDefault(record.countdownEndsAt),
+      collectName: booleanOrDefault(record.collectName),
       collectEmail: booleanOrDefault(record.collectEmail),
       collectPhone: booleanOrDefault(record.collectPhone),
       leadButtonLabel: stringOrDefault(record.leadButtonLabel, base.leadButtonLabel),
       successMessage: stringOrDefault(record.successMessage, base.successMessage),
+      redirectToWhatsApp: booleanOrDefault(record.redirectToWhatsApp),
+      whatsappNumber: stringOrDefault(record.whatsappNumber),
+      whatsappMessage: stringOrDefault(record.whatsappMessage, base.whatsappMessage),
       pageMode: enumValue(
         record.pageMode,
         ["all", "home", "product", "collection", "cart", "url_contains"] as const,
@@ -472,6 +548,8 @@ export default function Index() {
   const activeLeads = activePopup
     ? loaderData.leads.filter((lead) => lead.popupId === activePopup.id)
     : [];
+  const activeCtr = activeStats.views ? Math.round((activeStats.clicks / activeStats.views) * 1000) / 10 : 0;
+  const activeLeadRate = activeStats.views ? Math.round((activeStats.leads / activeStats.views) * 1000) / 10 : 0;
   const isSaving = saveFetcher.state !== "idle";
   const isUploading = uploadFetcher.state !== "idle";
 
@@ -542,6 +620,21 @@ export default function Index() {
       if (next.length === 0) setStep("type");
       return next;
     });
+  };
+
+  const applyPreset = (preset: PopupPreset) => {
+    if (!activePopup) return;
+
+    setPopups((current) =>
+      current.map((popup) =>
+        popup.id === activePopup.id
+          ? {
+              ...popup,
+              ...preset.patch,
+            }
+          : popup,
+      ),
+    );
   };
 
   const savePopups = () => {
@@ -816,6 +909,13 @@ export default function Index() {
 
                   {activePanel === "style" && (
                     <div className="dityy-panel">
+                      <div className="dityy-presets">
+                        {popupPresets.map((preset) => (
+                          <button key={preset.id} type="button" onClick={() => applyPreset(preset)}>
+                            {preset.label}
+                          </button>
+                        ))}
+                      </div>
                       <div className="dityy-field-grid">
                         <label>
                           Display type
@@ -931,6 +1031,10 @@ export default function Index() {
                   {activePanel === "data" && (
                     <div className="dityy-panel">
                       <label className="dityy-check">
+                        <input type="checkbox" checked={activePopup.collectName} onChange={(event) => updatePopup(activePopup.id, "collectName", event.currentTarget.checked)} />
+                        Collect name
+                      </label>
+                      <label className="dityy-check">
                         <input type="checkbox" checked={activePopup.collectEmail} onChange={(event) => updatePopup(activePopup.id, "collectEmail", event.currentTarget.checked)} />
                         Collect email
                       </label>
@@ -948,11 +1052,27 @@ export default function Index() {
                           <input value={activePopup.successMessage} onChange={(event) => updatePopup(activePopup.id, "successMessage", event.currentTarget.value)} />
                         </label>
                       </div>
+                      <label className="dityy-check">
+                        <input type="checkbox" checked={activePopup.redirectToWhatsApp} onChange={(event) => updatePopup(activePopup.id, "redirectToWhatsApp", event.currentTarget.checked)} />
+                        Open WhatsApp after lead submit
+                      </label>
+                      <div className="dityy-field-grid">
+                        <label>
+                          WhatsApp number
+                          <input value={activePopup.whatsappNumber} placeholder="2010xxxxxxx" onChange={(event) => updatePopup(activePopup.id, "whatsappNumber", event.currentTarget.value)} />
+                        </label>
+                        <label>
+                          WhatsApp message
+                          <input dir="auto" value={activePopup.whatsappMessage} onChange={(event) => updatePopup(activePopup.id, "whatsappMessage", event.currentTarget.value)} />
+                        </label>
+                      </div>
                       <div className="dityy-stat-grid">
                         <span><strong>{activeStats.views}</strong> Views</span>
                         <span><strong>{activeStats.clicks}</strong> Clicks</span>
                         <span><strong>{activeStats.leads}</strong> Leads</span>
                         <span><strong>{activeStats.closes}</strong> Closes</span>
+                        <span><strong>{activeCtr}%</strong> CTR</span>
+                        <span><strong>{activeLeadRate}%</strong> Lead rate</span>
                       </div>
                       <div className="dityy-leads-head">
                         <strong>Latest leads</strong>
@@ -1013,8 +1133,9 @@ export default function Index() {
                             <strong>45</strong>
                           </div>
                         )}
-                        {(activePopup.collectEmail || activePopup.collectPhone) && (
+                        {(activePopup.collectName || activePopup.collectEmail || activePopup.collectPhone) && (
                           <div className="dityy-preview-lead">
+                            {activePopup.collectName && <input placeholder="Name" readOnly />}
                             {activePopup.collectEmail && <input placeholder="Email" readOnly />}
                             {activePopup.collectPhone && <input placeholder="Phone" readOnly />}
                           </div>
@@ -1313,6 +1434,20 @@ const adminStyles = `
   .dityy-stat-grid strong {
     display: block;
     font-size: 22px;
+  }
+
+  .dityy-presets {
+    display: grid;
+    gap: 8px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .dityy-presets button {
+    background: #f6f6f6;
+    border: 1px solid #d8d8d8;
+    border-radius: 7px;
+    cursor: pointer;
+    min-height: 38px;
   }
 
   .dityy-leads-head {
