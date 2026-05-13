@@ -718,8 +718,13 @@ export default function Index() {
   const [leadSearch, setLeadSearch] = useState("");
   const [leadDateFrom, setLeadDateFrom] = useState("");
   const [leadDateTo, setLeadDateTo] = useState("");
+  const [savedSnapshot, setSavedSnapshot] = useState(() =>
+    JSON.stringify({ popups: loaderData.popups, integrations: loaderData.integrations }),
+  );
 
   const enabledCount = useMemo(() => popups.filter((popup) => popup.enabled).length, [popups]);
+  const currentSnapshot = useMemo(() => JSON.stringify({ popups, integrations }), [popups, integrations]);
+  const hasUnsavedChanges = currentSnapshot !== savedSnapshot;
   const activePopup = popups.find((popup) => popup.id === activeId) ?? null;
   const activeStats = activePopup ? loaderData.stats[activePopup.id] || emptyStats() : emptyStats();
   const activeLeads = activePopup
@@ -743,11 +748,12 @@ export default function Index() {
 
   useEffect(() => {
     if (saveFetcher.data?.ok && saveFetcher.data.intent === "save") {
+      setSavedSnapshot(JSON.stringify({ popups: saveFetcher.data.popups, integrations }));
       shopify.toast.show("Popups saved");
     } else if (saveFetcher.data?.ok === false) {
       shopify.toast.show(saveFetcher.data.error, { isError: true });
     }
-  }, [saveFetcher.data, shopify]);
+  }, [integrations, saveFetcher.data, shopify]);
 
   useEffect(() => {
     if (uploadFetcher.data?.ok && uploadFetcher.data.intent === "upload") {
@@ -891,12 +897,31 @@ export default function Index() {
         "--preview-spacing": `${activePopup.spacing}px`,
       } as CSSProperties)
     : undefined;
+  const panelItems: Array<{
+    id: typeof activePanel;
+    label: string;
+    description: string;
+    badge?: string;
+  }> = [
+    { id: "content", label: "Announcement", description: "Text, CTA, images, coupon" },
+    { id: "style", label: "Style & Behavior", description: "Template, colors, spacing" },
+    { id: "targeting", label: "Targeting", description: "Pages, products, audience", badge: "Rules" },
+    { id: "automation", label: "Automation", description: "Trigger, frequency, A/B" },
+    { id: "data", label: "Data", description: "Leads, consent, analytics" },
+    { id: "integrations", label: "Integrations", description: "Sheets, Klaviyo, Mailchimp" },
+  ];
+  const activePanelItem = panelItems.find((item) => item.id === activePanel) || panelItems[0];
 
   return (
     <s-page heading="Dityy Popup Manager">
       <s-button slot="primary-action" onClick={savePopups} {...(isSaving ? { loading: true } : {})}>
         Save popups
       </s-button>
+
+      <div className={`dityy-save-banner${hasUnsavedChanges ? " dityy-save-banner--dirty" : ""}`}>
+        <span>{hasUnsavedChanges ? "Unsaved changes" : "Saved"}</span>
+        <small>{hasUnsavedChanges ? "Review the preview, then save to publish your latest popup settings." : "Your latest configuration is stored."}</small>
+      </div>
 
       <div className="dityy-app-shell">
         <aside className="dityy-sidebar">
@@ -1014,22 +1039,24 @@ export default function Index() {
 
               <div className="dityy-builder__grid">
                 <div className="dityy-editor">
+                  <div className="dityy-editor__head">
+                    <button type="button" className="dityy-back-link" onClick={() => setStep("type")}>
+                      Back
+                    </button>
+                    <strong>{activePanelItem.label}</strong>
+                    <span>{activePopup.enabled ? "Draft saved locally" : "Paused"}</span>
+                  </div>
                   <div className="dityy-tabs">
-                    {[
-                      ["content", "Announcement"],
-                      ["style", "Style"],
-                      ["targeting", "Targeting"],
-                      ["automation", "Automation"],
-                      ["data", "Data"],
-                      ["integrations", "Integrations"],
-                    ].map(([id, label]) => (
+                    {panelItems.map((item) => (
                       <button
-                        key={id}
+                        key={item.id}
                         type="button"
-                        className={activePanel === id ? "active" : ""}
-                        onClick={() => setActivePanel(id as typeof activePanel)}
+                        className={activePanel === item.id ? "active" : ""}
+                        onClick={() => setActivePanel(item.id)}
                       >
-                        {label}
+                        <span>{item.label}</span>
+                        {item.badge && <em>{item.badge}</em>}
+                        <small>{item.description}</small>
                       </button>
                     ))}
                   </div>
@@ -1561,8 +1588,33 @@ const adminStyles = `
     display: grid;
     gap: 0;
     grid-template-columns: 288px minmax(0, 1fr);
-    margin: -12px -16px -24px;
+    margin: 0 -16px -24px;
     min-height: calc(100vh - 68px);
+  }
+
+  .dityy-save-banner {
+    align-items: center;
+    background: #f7f7f5;
+    border-bottom: 1px solid #dfe2dc;
+    display: flex;
+    gap: 12px;
+    margin: -12px -16px 12px;
+    min-height: 46px;
+    padding: 0 22px;
+  }
+
+  .dityy-save-banner span {
+    color: #1f2421;
+    font-weight: 750;
+  }
+
+  .dityy-save-banner small {
+    color: #666d68;
+  }
+
+  .dityy-save-banner--dirty span::before {
+    content: "△";
+    margin-right: 8px;
   }
 
   .dityy-sidebar {
@@ -1688,15 +1740,15 @@ const adminStyles = `
   .dityy-builder {
     background: #fff;
     border: 1px solid #dedfd8;
-    border-radius: 16px;
-    box-shadow: 0 22px 70px rgba(16,21,19,.08);
+    border-radius: 10px;
+    box-shadow: 0 1px 2px rgba(16,21,19,.06);
     padding: 22px;
   }
 
   .dityy-option-grid,
   .dityy-display-grid {
     display: grid;
-    gap: 16px;
+    gap: 18px;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     margin-top: 22px;
   }
@@ -1707,14 +1759,22 @@ const adminStyles = `
 
   .dityy-option-card,
   .dityy-display-card {
-    background: #fffdfa;
-    border: 1px solid #dedfd8;
-    border-radius: 14px;
+    background: #fff;
+    border: 1px solid #bfc4c0;
+    border-radius: 10px;
     cursor: pointer;
-    min-height: 112px;
-    padding: 18px;
+    min-height: 108px;
+    padding: 20px;
     position: relative;
     text-align: left;
+    transition: background .15s ease, border-color .15s ease, box-shadow .15s ease;
+  }
+
+  .dityy-option-card:hover,
+  .dityy-display-card:hover {
+    background: #fafafa;
+    border-color: #8c918d;
+    box-shadow: 0 1px 0 rgba(16,21,19,.08);
   }
 
   .dityy-display-card {
@@ -1722,8 +1782,8 @@ const adminStyles = `
   }
 
   .dityy-display-card--active {
-    background: #eef8f1;
-    border-color: #77c8a7;
+    background: #f0f0ee;
+    border-color: #8c918d;
   }
 
   .dityy-option-card strong,
@@ -1752,14 +1812,14 @@ const adminStyles = `
   .dityy-option-icon,
   .dityy-display-art {
     align-items: center;
-    background: #ececec;
-    border: 1px solid #c9c9c9;
-    border-radius: 6px;
+    background: #e9e9e6;
+    border: 2px solid #6c716d;
+    border-radius: 2px;
     display: inline-flex;
-    height: 46px;
+    height: 44px;
     justify-content: center;
     margin-bottom: 10px;
-    width: 54px;
+    width: 58px;
   }
 
   .dityy-builder__top {
@@ -1791,7 +1851,7 @@ const adminStyles = `
   .dityy-builder__grid {
     display: grid;
     gap: 18px;
-    grid-template-columns: minmax(520px, 1fr) minmax(420px, .84fr);
+    grid-template-columns: 360px minmax(640px, 1fr);
   }
 
   .dityy-editor,
@@ -1809,15 +1869,57 @@ const adminStyles = `
   }
 
   .dityy-tabs {
-    background: #f8f7f1;
+    background: #fff;
     border-bottom: 1px solid #e4e1d8;
-    display: flex;
-    gap: 6px;
-    overflow-x: auto;
-    padding: 8px;
+    display: grid;
+    gap: 14px;
+    padding: 18px 14px;
   }
 
-  .dityy-tabs button,
+  .dityy-tabs button {
+    align-items: center;
+    background: #fff;
+    border: 1px solid #c8ccc8;
+    border-radius: 9px;
+    cursor: pointer;
+    display: grid;
+    gap: 4px;
+    min-height: 74px;
+    padding: 13px 44px 13px 14px;
+    position: relative;
+    text-align: left;
+  }
+
+  .dityy-tabs button::after {
+    color: #4f5550;
+    content: "›";
+    font-size: 28px;
+    line-height: 1;
+    position: absolute;
+    right: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+  }
+
+  .dityy-tabs button span {
+    font-weight: 750;
+  }
+
+  .dityy-tabs button small {
+    color: #6b716d;
+  }
+
+  .dityy-tabs button em {
+    background: #bdeeb9;
+    border-radius: 999px;
+    font-size: 11px;
+    font-style: normal;
+    padding: 3px 8px;
+    position: absolute;
+    right: 38px;
+    top: 15px;
+  }
+
   .dityy-preview__toolbar button {
     background: transparent;
     border: 0;
@@ -1827,16 +1929,51 @@ const adminStyles = `
     padding: 8px 10px;
   }
 
-  .dityy-tabs button.active,
+  .dityy-tabs button.active {
+    background: #f6f7f4;
+    border-color: #0d1512;
+    box-shadow: inset 3px 0 0 #0d1512;
+  }
+
   .dityy-preview__toolbar button.active {
     background: #101513;
     color: #fff;
   }
 
+  .dityy-editor__head {
+    align-items: center;
+    background: #f7f7f5;
+    border-bottom: 1px solid #dfe2dc;
+    display: grid;
+    gap: 6px;
+    grid-template-columns: auto 1fr;
+    padding: 14px;
+  }
+
+  .dityy-editor__head strong {
+    justify-self: center;
+  }
+
+  .dityy-editor__head span {
+    color: #6b716d;
+    font-size: 12px;
+    grid-column: 1 / -1;
+    justify-self: center;
+  }
+
+  .dityy-back-link {
+    background: transparent;
+    border: 0;
+    color: #135fd0;
+    cursor: pointer;
+    padding: 0;
+  }
+
   .dityy-panel {
     display: grid;
     gap: 14px;
-    padding: 18px;
+    border-top: 1px solid #ecece8;
+    padding: 18px 14px 22px;
   }
 
   .dityy-field-grid,
