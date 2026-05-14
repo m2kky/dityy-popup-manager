@@ -712,6 +712,7 @@ export default function Index() {
   const [step, setStep] = useState<"type" | "display" | "editor">(
     loaderData.popups.length ? "editor" : "type",
   );
+  const [panelView, setPanelView] = useState<"menu" | "detail">("menu");
   const [activePanel, setActivePanel] = useState<"content" | "style" | "targeting" | "automation" | "data" | "integrations">("content");
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "mobile">("desktop");
   const [previewMode, setPreviewMode] = useState<"product" | "cart">("product");
@@ -938,22 +939,25 @@ export default function Index() {
             <span><strong>{Object.values(loaderData.stats).reduce((total, item) => total + item.views, 0)}</strong> views</span>
             <span><strong>{Object.values(loaderData.stats).reduce((total, item) => total + item.leads, 0)}</strong> leads</span>
           </div>
-          {popups.map((popup) => (
-            <button
-              key={popup.id}
-              type="button"
-              className={`dityy-campaign-item${popup.id === activeId ? " dityy-campaign-item--active" : ""}`}
-              onClick={() => {
-                setActiveId(popup.id);
-                setStep("editor");
-              }}
-            >
-              <span>{popup.name || "Untitled campaign"}</span>
-              <small>
-                {popup.enabled ? "Live" : "Paused"} · {popup.displayType} · {popup.campaignType.replace("_", " ")}
-              </small>
-            </button>
-          ))}
+          <div className="dityy-campaign-strip">
+            {popups.map((popup) => (
+              <button
+                key={popup.id}
+                type="button"
+                className={`dityy-campaign-item${popup.id === activeId ? " dityy-campaign-item--active" : ""}`}
+                onClick={() => {
+                  setActiveId(popup.id);
+                  setStep("editor");
+                  setPanelView("menu");
+                }}
+              >
+                <span>{popup.name || "Untitled campaign"}</span>
+                <small>
+                  {popup.enabled ? "Live" : "Paused"} · {popup.displayType} · {popup.campaignType.replace("_", " ")}
+                </small>
+              </button>
+            ))}
+          </div>
         </aside>
 
         <main className="dityy-main">
@@ -1040,28 +1044,43 @@ export default function Index() {
               <div className="dityy-builder__grid">
                 <div className="dityy-editor">
                   <div className="dityy-editor__head">
-                    <button type="button" className="dityy-back-link" onClick={() => setStep("type")}>
+                    <button
+                      type="button"
+                      className="dityy-back-link"
+                      onClick={() => {
+                        if (panelView === "detail") {
+                          setPanelView("menu");
+                          return;
+                        }
+                        setStep("type");
+                      }}
+                    >
                       Back
                     </button>
-                    <strong>{activePanelItem.label}</strong>
+                    <strong>{panelView === "detail" ? activePanelItem.label : "Campaign settings"}</strong>
                     <span>{activePopup.enabled ? "Draft saved locally" : "Paused"}</span>
                   </div>
-                  <div className="dityy-tabs">
-                    {panelItems.map((item) => (
-                      <button
-                        key={item.id}
-                        type="button"
-                        className={activePanel === item.id ? "active" : ""}
-                        onClick={() => setActivePanel(item.id)}
-                      >
-                        <span>{item.label}</span>
-                        {item.badge && <em>{item.badge}</em>}
-                        <small>{item.description}</small>
-                      </button>
-                    ))}
-                  </div>
+                  {panelView === "menu" && (
+                    <div className="dityy-tabs">
+                      {panelItems.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          className={activePanel === item.id ? "active" : ""}
+                          onClick={() => {
+                            setActivePanel(item.id);
+                            setPanelView("detail");
+                          }}
+                        >
+                          <span>{item.label}</span>
+                          {item.badge && <em>{item.badge}</em>}
+                          <small>{item.description}</small>
+                        </button>
+                      ))}
+                    </div>
+                  )}
 
-                  {activePanel === "content" && (
+                  {panelView === "detail" && activePanel === "content" && (
                     <div className="dityy-panel">
                       <label className="dityy-check">
                         <input
@@ -1144,7 +1163,7 @@ export default function Index() {
                     </div>
                   )}
 
-                  {activePanel === "style" && (
+                  {panelView === "detail" && activePanel === "style" && (
                     <div className="dityy-panel">
                       <div className="dityy-presets">
                         {popupPresets.map((preset) => (
@@ -1227,7 +1246,7 @@ export default function Index() {
                     </div>
                   )}
 
-                  {activePanel === "targeting" && (
+                  {panelView === "detail" && activePanel === "targeting" && (
                     <div className="dityy-panel">
                       <div className="dityy-field-grid">
                         <label>
@@ -1285,7 +1304,7 @@ export default function Index() {
                     </div>
                   )}
 
-                  {activePanel === "automation" && (
+                  {panelView === "detail" && activePanel === "automation" && (
                     <div className="dityy-panel">
                       <div className="dityy-field-grid">
                         <label>
@@ -1356,7 +1375,7 @@ export default function Index() {
                     </div>
                   )}
 
-                  {activePanel === "data" && (
+                  {panelView === "detail" && activePanel === "data" && (
                     <div className="dityy-panel">
                       <label className="dityy-check">
                         <input type="checkbox" checked={activePopup.collectName} onChange={(event) => updatePopup(activePopup.id, "collectName", event.currentTarget.checked)} />
@@ -1463,7 +1482,7 @@ export default function Index() {
                     </div>
                   )}
 
-                  {activePanel === "integrations" && (
+                  {panelView === "detail" && activePanel === "integrations" && (
                     <div className="dityy-panel">
                       <div className="dityy-integration-note">
                         These keys stay server-side and are not sent to the storefront.
@@ -1584,12 +1603,11 @@ export default function Index() {
 
 const adminStyles = `
   .dityy-app-shell {
-    background: #f3f4f0;
-    display: grid;
-    gap: 0;
-    grid-template-columns: 288px minmax(0, 1fr);
+    background: #f4f4f4;
+    display: block;
     margin: 0 -16px -24px;
     min-height: calc(100vh - 68px);
+    overflow-x: hidden;
   }
 
   .dityy-save-banner {
@@ -1618,13 +1636,19 @@ const adminStyles = `
   }
 
   .dityy-sidebar {
-    background: #0d1512;
-    border-right: 1px solid rgba(255,255,255,.08);
-    color: #f7f4ed;
-    min-height: calc(100vh - 68px);
-    padding: 22px 18px;
-    position: sticky;
-    top: 0;
+    align-items: center;
+    background: #fff;
+    border: 1px solid #dedfd8;
+    border-radius: 10px;
+    color: #1f2421;
+    display: grid;
+    gap: 14px;
+    grid-template-columns: auto auto minmax(0, 1fr);
+    margin: 0 auto 12px;
+    max-width: 1500px;
+    min-height: auto;
+    padding: 14px 16px;
+    position: static;
   }
 
   .dityy-sidebar__head,
@@ -1647,57 +1671,65 @@ const adminStyles = `
   }
 
   .dityy-sidebar__head span {
-    color: #aeb7b1;
+    color: #6b716d;
     display: block;
     font-size: 12px;
     margin-top: 4px;
   }
 
   .dityy-sidebar .dityy-icon-button {
-    background: #f7f4ed;
-    border-color: transparent;
-    color: #101513;
+    background: #101513;
+    border-color: #101513;
+    color: #fff;
     font-weight: 800;
   }
 
   .dityy-sidebar__metrics {
-    border-bottom: 1px solid rgba(255,255,255,.08);
-    border-top: 1px solid rgba(255,255,255,.08);
+    border: 0;
     display: grid;
     gap: 10px;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    margin: 18px 0 8px;
-    padding: 14px 0;
+    margin: 0;
+    padding: 0;
   }
 
   .dityy-sidebar__metrics span {
-    color: #aeb7b1;
+    color: #6b716d;
     font-size: 12px;
   }
 
   .dityy-sidebar__metrics strong {
-    color: #f7f4ed;
+    color: #101513;
     display: block;
-    font-size: 24px;
+    font-size: 20px;
+  }
+
+  .dityy-campaign-strip {
+    display: flex;
+    gap: 10px;
+    min-width: 0;
+    overflow-x: auto;
+    padding-bottom: 2px;
   }
 
   .dityy-campaign-item {
-    background: transparent;
-    border: 1px solid transparent;
-    border-radius: 12px;
-    color: #f7f4ed;
+    background: #f8f8f6;
+    border: 1px solid #d7d9d3;
+    border-radius: 9px;
+    color: #1f2421;
     cursor: pointer;
     display: block;
-    margin-top: 10px;
+    flex: 0 0 220px;
+    margin-top: 0;
     padding: 12px;
     text-align: left;
     width: 100%;
   }
 
   .dityy-campaign-item--active {
-    background: #f7f4ed;
-    border-color: rgba(255,255,255,.18);
-    box-shadow: 0 14px 34px rgba(0,0,0,.24);
+    background: #fff;
+    border-color: #101513;
+    box-shadow: inset 3px 0 0 #101513;
     color: #0d1512;
   }
 
@@ -1714,7 +1746,7 @@ const adminStyles = `
   }
 
   .dityy-sidebar .dityy-campaign-item small {
-    color: #aeb7b1;
+    color: #6b716d;
   }
 
   .dityy-sidebar .dityy-campaign-item--active small {
@@ -1722,8 +1754,10 @@ const adminStyles = `
   }
 
   .dityy-main {
+    margin: 0 auto;
+    max-width: 1500px;
     min-width: 0;
-    padding: 24px;
+    padding: 0 0 28px;
   }
 
   .dityy-main h2 {
@@ -1743,6 +1777,15 @@ const adminStyles = `
     border-radius: 10px;
     box-shadow: 0 1px 2px rgba(16,21,19,.06);
     padding: 22px;
+  }
+
+  .dityy-card {
+    margin: 32px auto;
+    max-width: 960px;
+  }
+
+  .dityy-builder {
+    padding: 0;
   }
 
   .dityy-option-grid,
@@ -1824,8 +1867,8 @@ const adminStyles = `
 
   .dityy-builder__top {
     border-bottom: 1px solid #ededed;
-    margin-bottom: 18px;
-    padding-bottom: 16px;
+    margin-bottom: 0;
+    padding: 22px 24px 18px;
   }
 
   .dityy-actions {
@@ -1850,22 +1893,24 @@ const adminStyles = `
 
   .dityy-builder__grid {
     display: grid;
-    gap: 18px;
-    grid-template-columns: 360px minmax(640px, 1fr);
+    gap: 0;
+    grid-template-columns: 360px minmax(0, 1fr);
+    min-height: 760px;
   }
 
   .dityy-editor,
   .dityy-preview {
     background: #fff;
-    border: 1px solid #dedfd8;
-    border-radius: 14px;
+    border: 0;
+    border-radius: 0;
     overflow: hidden;
   }
 
   .dityy-preview {
     align-self: start;
+    border-left: 1px solid #dedfd8;
     position: sticky;
-    top: 16px;
+    top: 0;
   }
 
   .dityy-tabs {
@@ -2161,15 +2206,15 @@ const adminStyles = `
     background:
       linear-gradient(135deg, rgba(119,200,167,.18), transparent 32%),
       #efeee8;
-    min-height: 650px;
-    padding: 34px;
+    min-height: 716px;
+    padding: 48px 54px;
     position: relative;
   }
 
   .dityy-preview-stage--mobile {
-    margin: 24px auto;
+    margin: 0 auto;
     max-width: 390px;
-    min-height: 680px;
+    min-height: 716px;
   }
 
   .dityy-preview-page {
