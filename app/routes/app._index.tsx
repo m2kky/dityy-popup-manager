@@ -732,7 +732,7 @@ export default function Index() {
   const [panelView, setPanelView] = useState<"menu" | "detail">("menu");
   const [activePanel, setActivePanel] = useState<"content" | "style" | "targeting" | "automation" | "data" | "integrations">("content");
   const [previewDevice, setPreviewDevice] = useState<"desktop" | "mobile">("desktop");
-  const [previewMode, setPreviewMode] = useState<"product" | "cart">("product");
+  const [previewMode, setPreviewMode] = useState<"home" | "product" | "cart">("home");
   const [leadSearch, setLeadSearch] = useState("");
   const [leadDateFrom, setLeadDateFrom] = useState("");
   const [leadDateTo, setLeadDateTo] = useState("");
@@ -744,6 +744,21 @@ export default function Index() {
   const currentSnapshot = useMemo(() => JSON.stringify({ popups, integrations }), [popups, integrations]);
   const hasUnsavedChanges = currentSnapshot !== savedSnapshot;
   const activePopup = popups.find((popup) => popup.id === activeId) ?? null;
+  const activePreviewPageMode = activePopup?.pageMode;
+  const activePreviewId = activePopup?.id;
+  const savedState = useMemo(() => {
+    try {
+      return JSON.parse(savedSnapshot) as { popups: PopupConfig[]; integrations: IntegrationConfig };
+    } catch {
+      return { popups: [], integrations: emptyIntegrations() };
+    }
+  }, [savedSnapshot]);
+  const savedActivePopup = activePopup
+    ? savedState.popups.find((popup) => popup.id === activePopup.id)
+    : null;
+  const activeHasUnsavedChanges = activePopup
+    ? JSON.stringify(activePopup) !== JSON.stringify(savedActivePopup)
+    : false;
   const activeStats = activePopup ? loaderData.stats[activePopup.id] || emptyStats() : emptyStats();
   const activeLeads = activePopup
     ? loaderData.leads
@@ -812,6 +827,19 @@ export default function Index() {
     }
   }, [uploadFetcher.data, shopify]);
 
+  useEffect(() => {
+    if (!activePreviewPageMode) return;
+    if (activePreviewPageMode === "cart") {
+      setPreviewMode("cart");
+      return;
+    }
+    if (activePreviewPageMode === "product") {
+      setPreviewMode("product");
+      return;
+    }
+    setPreviewMode("home");
+  }, [activePreviewId, activePreviewPageMode]);
+
   const updatePopup = <Key extends keyof PopupConfig>(
     id: string,
     key: Key,
@@ -820,6 +848,35 @@ export default function Index() {
     setPopups((current) =>
       current.map((popup) => (popup.id === id ? { ...popup, [key]: value } : popup)),
     );
+  };
+
+  const patchPopup = (id: string, patch: Partial<PopupConfig>) => {
+    setPopups((current) =>
+      current.map((popup) => (popup.id === id ? { ...popup, ...patch } : popup)),
+    );
+  };
+
+  const updateDisplayType = (displayType: DisplayType) => {
+    if (!activePopup) return;
+
+    patchPopup(activePopup.id, {
+      displayType,
+      position: displayType === "bar" ? "top" : "center",
+      trigger: displayType === "popup" ? activePopup.trigger : "delay",
+    });
+  };
+
+  const updatePageMode = (pageMode: PopupPageMode) => {
+    if (!activePopup) return;
+
+    patchPopup(activePopup.id, {
+      pageMode,
+      urlContains: pageMode === "url_contains" ? activePopup.urlContains : "",
+      productTags: pageMode === "product" ? activePopup.productTags : "",
+      collectionHandles: pageMode === "collection" ? activePopup.collectionHandles : "",
+      cartMinSubtotal: pageMode === "cart" ? activePopup.cartMinSubtotal : 0,
+      cartMaxSubtotal: pageMode === "cart" ? activePopup.cartMaxSubtotal : 0,
+    });
   };
 
   const updateIntegration = <Key extends keyof IntegrationConfig>(
@@ -886,12 +943,15 @@ export default function Index() {
     );
   };
 
-  const savePopups = () => {
+  const savePopups = (
+    nextPopups: PopupConfig[] = popups,
+    nextIntegrations: IntegrationConfig = integrations,
+  ) => {
     saveFetcher.submit(
       {
         intent: "save",
-        payload: JSON.stringify(popups),
-        integrations: JSON.stringify(integrations),
+        payload: JSON.stringify(nextPopups),
+        integrations: JSON.stringify(nextIntegrations),
         appInstallationId: loaderData.appInstallationId,
       },
       { method: "POST" },
@@ -901,6 +961,16 @@ export default function Index() {
   const saveActivePopup = () => {
     if (!activePopup) return;
     savePopups();
+  };
+
+  const setActivePublished = (enabled: boolean) => {
+    if (!activePopup) return;
+
+    const nextPopups = popups.map((popup) =>
+      popup.id === activePopup.id ? { ...popup, enabled } : popup,
+    );
+    setPopups(nextPopups);
+    savePopups(nextPopups);
   };
 
   const exportActiveLeads = () => {
@@ -967,13 +1037,9 @@ export default function Index() {
 
   return (
     <s-page heading="Dityy Popup Manager">
-      <s-button slot="primary-action" variant="primary" onClick={savePopups} {...(isSaving ? { loading: true } : {})}>
-        Save popups
-      </s-button>
-
       <div className={`dityy-save-banner${hasUnsavedChanges ? " dityy-save-banner--dirty" : ""}`}>
         <span>{hasUnsavedChanges ? "Unsaved changes" : "Saved"}</span>
-        <small>{hasUnsavedChanges ? "Review the preview, then save to publish your latest popup settings." : "Your latest configuration is stored."}</small>
+        <small>{hasUnsavedChanges ? "Use Save campaign on the selected campaign. Pause/Publish saves immediately." : "Your latest configuration is stored."}</small>
       </div>
 
       <div className="dityy-app-shell">
@@ -1060,8 +1126,7 @@ export default function Index() {
                     type="button"
                     className={`dityy-display-card${activePopup.displayType === item.id ? " dityy-display-card--active" : ""}`}
                     onClick={() => {
-                      updatePopup(activePopup.id, "displayType", item.id);
-                      updatePopup(activePopup.id, "position", item.id === "bar" ? "top" : "center");
+                      updateDisplayType(item.id);
                       setStep("editor");
                     }}
                   >
@@ -1084,8 +1149,19 @@ export default function Index() {
                   </p>
                 </div>
                 <div className="dityy-actions">
+                  <span className={`dityy-status-pill${activePopup.enabled ? " dityy-status-pill--live" : ""}`}>
+                    {activePopup.enabled ? "Live" : "Paused"}
+                  </span>
+                  <button
+                    type="button"
+                    className="dityy-secondary"
+                    onClick={() => setActivePublished(!activePopup.enabled)}
+                    disabled={isSaving}
+                  >
+                    {activePopup.enabled ? "Pause" : "Publish"}
+                  </button>
                   <button type="button" className="dityy-primary" onClick={saveActivePopup} disabled={isSaving}>
-                    Save this campaign
+                    {activeHasUnsavedChanges ? "Save campaign" : "Saved"}
                   </button>
                   <button type="button" className="dityy-secondary" onClick={() => duplicatePopup(activePopup.id)}>
                     Duplicate
@@ -1137,14 +1213,10 @@ export default function Index() {
 
                   {panelView === "detail" && activePanel === "content" && (
                     <div className="dityy-panel">
-                      <label className="dityy-check">
-                        <input
-                          type="checkbox"
-                          checked={activePopup.enabled}
-                          onChange={(event) => updatePopup(activePopup.id, "enabled", event.currentTarget.checked)}
-                        />
-                        Enabled
-                      </label>
+                      <div className="dityy-logic-card">
+                        <strong>{activePopup.enabled ? "Campaign is live" : "Campaign is paused"}</strong>
+                        <span>{activePopup.enabled ? "Use Pause at the top to stop only this campaign." : "Use Publish at the top to turn only this campaign on."}</span>
+                      </div>
                       <div className="dityy-field-grid">
                         <label>
                           Internal name
@@ -1240,7 +1312,7 @@ export default function Index() {
                         </label>
                         <label>
                           Display type
-                          <select value={activePopup.displayType} onChange={(event) => updatePopup(activePopup.id, "displayType", event.currentTarget.value as DisplayType)}>
+                          <select value={activePopup.displayType} onChange={(event) => updateDisplayType(event.currentTarget.value as DisplayType)}>
                             <option value="popup">Popup</option>
                             <option value="bar">Bar</option>
                             <option value="embed">Embed</option>
@@ -1303,10 +1375,14 @@ export default function Index() {
 
                   {panelView === "detail" && activePanel === "targeting" && (
                     <div className="dityy-panel">
+                      <div className="dityy-logic-card">
+                        <strong>Targeting is now scoped</strong>
+                        <span>Product tags only appear on product pages. Cart subtotal only appears on the cart page. Changing Show on clears incompatible rules automatically.</span>
+                      </div>
                       <div className="dityy-field-grid">
                         <label>
                           Show on
-                          <select value={activePopup.pageMode} onChange={(event) => updatePopup(activePopup.id, "pageMode", event.currentTarget.value as PopupPageMode)}>
+                          <select value={activePopup.pageMode} onChange={(event) => updatePageMode(event.currentTarget.value as PopupPageMode)}>
                             <option value="all">All pages</option>
                             <option value="home">Home page</option>
                             <option value="product">Product pages</option>
@@ -1315,10 +1391,12 @@ export default function Index() {
                             <option value="url_contains">URL contains</option>
                           </select>
                         </label>
-                        <label>
-                          URL contains
-                          <input value={activePopup.urlContains} disabled={activePopup.pageMode !== "url_contains"} onChange={(event) => updatePopup(activePopup.id, "urlContains", event.currentTarget.value)} />
-                        </label>
+                        {activePopup.pageMode === "url_contains" && (
+                          <label>
+                            URL contains
+                            <input value={activePopup.urlContains} placeholder="/collections/snacks" onChange={(event) => updatePopup(activePopup.id, "urlContains", event.currentTarget.value)} />
+                          </label>
+                        )}
                         <label>
                           Device
                           <select value={activePopup.deviceMode} onChange={(event) => updatePopup(activePopup.id, "deviceMode", event.currentTarget.value as DeviceMode)}>
@@ -1327,22 +1405,30 @@ export default function Index() {
                             <option value="mobile">Mobile only</option>
                           </select>
                         </label>
-                        <label>
-                          Cart subtotal from
-                          <input type="number" min={0} value={activePopup.cartMinSubtotal} onChange={(event) => updatePopup(activePopup.id, "cartMinSubtotal", Number(event.currentTarget.value))} />
-                        </label>
-                        <label>
-                          Cart subtotal to
-                          <input type="number" min={0} value={activePopup.cartMaxSubtotal} onChange={(event) => updatePopup(activePopup.id, "cartMaxSubtotal", Number(event.currentTarget.value))} />
-                        </label>
-                        <label>
-                          Product tags
-                          <input value={activePopup.productTags} placeholder="protein, keto" onChange={(event) => updatePopup(activePopup.id, "productTags", event.currentTarget.value)} />
-                        </label>
-                        <label>
-                          Collection handles
-                          <input value={activePopup.collectionHandles} placeholder="snacks, offers" onChange={(event) => updatePopup(activePopup.id, "collectionHandles", event.currentTarget.value)} />
-                        </label>
+                        {activePopup.pageMode === "cart" && (
+                          <>
+                            <label>
+                              Cart subtotal from
+                              <input type="number" min={0} value={activePopup.cartMinSubtotal} onChange={(event) => updatePopup(activePopup.id, "cartMinSubtotal", Number(event.currentTarget.value))} />
+                            </label>
+                            <label>
+                              Cart subtotal to
+                              <input type="number" min={0} value={activePopup.cartMaxSubtotal} onChange={(event) => updatePopup(activePopup.id, "cartMaxSubtotal", Number(event.currentTarget.value))} />
+                            </label>
+                          </>
+                        )}
+                        {activePopup.pageMode === "product" && (
+                          <label>
+                            Product tags
+                            <input value={activePopup.productTags} placeholder="protein, keto" onChange={(event) => updatePopup(activePopup.id, "productTags", event.currentTarget.value)} />
+                          </label>
+                        )}
+                        {activePopup.pageMode === "collection" && (
+                          <label>
+                            Collection handles
+                            <input value={activePopup.collectionHandles} placeholder="snacks, offers" onChange={(event) => updatePopup(activePopup.id, "collectionHandles", event.currentTarget.value)} />
+                          </label>
+                        )}
                         <label>
                           Customer tags
                           <input value={activePopup.customerTags} placeholder="vip, wholesale" onChange={(event) => updatePopup(activePopup.id, "customerTags", event.currentTarget.value)} />
@@ -1361,23 +1447,37 @@ export default function Index() {
 
                   {panelView === "detail" && activePanel === "automation" && (
                     <div className="dityy-panel">
+                      {activePopup.displayType !== "popup" && (
+                        <div className="dityy-logic-card">
+                          <strong>{activePopup.displayType === "bar" ? "Bars" : "Embeds"} show immediately</strong>
+                          <span>Scroll, exit intent, and delay are only used by popup modals.</span>
+                        </div>
+                      )}
                       <div className="dityy-field-grid">
-                        <label>
-                          Trigger
-                          <select value={activePopup.trigger} onChange={(event) => updatePopup(activePopup.id, "trigger", event.currentTarget.value as PopupTrigger)}>
-                            <option value="delay">After seconds</option>
-                            <option value="scroll">After scroll</option>
-                            <option value="exit">Exit intent</option>
-                          </select>
-                        </label>
-                        <label>
-                          Delay seconds
-                          <input type="number" min={0} value={activePopup.delaySeconds} onChange={(event) => updatePopup(activePopup.id, "delaySeconds", Number(event.currentTarget.value))} />
-                        </label>
-                        <label>
-                          Scroll percent
-                          <input type="number" min={1} max={100} value={activePopup.scrollPercent} onChange={(event) => updatePopup(activePopup.id, "scrollPercent", Number(event.currentTarget.value))} />
-                        </label>
+                        {activePopup.displayType === "popup" && (
+                          <>
+                            <label>
+                              Trigger
+                              <select value={activePopup.trigger} onChange={(event) => updatePopup(activePopup.id, "trigger", event.currentTarget.value as PopupTrigger)}>
+                                <option value="delay">After seconds</option>
+                                <option value="scroll">After scroll</option>
+                                <option value="exit">Exit intent</option>
+                              </select>
+                            </label>
+                            {activePopup.trigger === "delay" && (
+                              <label>
+                                Delay seconds
+                                <input type="number" min={0} value={activePopup.delaySeconds} onChange={(event) => updatePopup(activePopup.id, "delaySeconds", Number(event.currentTarget.value))} />
+                              </label>
+                            )}
+                            {activePopup.trigger === "scroll" && (
+                              <label>
+                                Scroll percent
+                                <input type="number" min={1} max={100} value={activePopup.scrollPercent} onChange={(event) => updatePopup(activePopup.id, "scrollPercent", Number(event.currentTarget.value))} />
+                              </label>
+                            )}
+                          </>
+                        )}
                         <label>
                           Frequency
                           <select value={activePopup.frequency} onChange={(event) => updatePopup(activePopup.id, "frequency", event.currentTarget.value as PopupFrequency)}>
@@ -1386,10 +1486,12 @@ export default function Index() {
                             <option value="days">Once every X days</option>
                           </select>
                         </label>
-                        <label>
-                          Days
-                          <input type="number" min={1} value={activePopup.frequencyDays} onChange={(event) => updatePopup(activePopup.id, "frequencyDays", Number(event.currentTarget.value))} />
-                        </label>
+                        {activePopup.frequency === "days" && (
+                          <label>
+                            Days
+                            <input type="number" min={1} value={activePopup.frequencyDays} onChange={(event) => updatePopup(activePopup.id, "frequencyDays", Number(event.currentTarget.value))} />
+                          </label>
+                        )}
                         <label>
                           Starts at
                           <input type="datetime-local" value={activePopup.startsAt} onChange={(event) => updatePopup(activePopup.id, "startsAt", event.currentTarget.value)} />
@@ -1576,6 +1678,7 @@ export default function Index() {
                   <div className="dityy-preview__toolbar">
                     <span>Live preview</span>
                     <div>
+                      <button type="button" className={previewMode === "home" ? "active" : ""} onClick={() => setPreviewMode("home")}>Home</button>
                       <button type="button" className={previewMode === "product" ? "active" : ""} onClick={() => setPreviewMode("product")}>Product</button>
                       <button type="button" className={previewMode === "cart" ? "active" : ""} onClick={() => setPreviewMode("cart")}>Cart</button>
                       <button type="button" className={previewDevice === "desktop" ? "active" : ""} onClick={() => setPreviewDevice("desktop")}>Desktop</button>
@@ -1592,7 +1695,15 @@ export default function Index() {
                         <em key={warning}>{warning}</em>
                       ))}
                     </div>
-                    {previewMode === "product" ? (
+                    {previewMode === "home" ? (
+                      <div className="dityy-preview-page dityy-preview-page--home">
+                        <strong>Dietty & Healthy Store</strong>
+                        <span />
+                        <div />
+                        <div />
+                        <div />
+                      </div>
+                    ) : previewMode === "product" ? (
                       <div className="dityy-preview-page dityy-preview-page--product">
                         <div className="dityy-preview-media" />
                         <div className="dityy-preview-copy">
@@ -1936,6 +2047,7 @@ const adminStyles = `
   }
 
   .dityy-actions {
+    align-items: center;
     display: flex;
     gap: 8px;
   }
@@ -1955,6 +2067,28 @@ const adminStyles = `
     background: #101513;
     border-color: #101513;
     color: #fff;
+  }
+
+  .dityy-primary:disabled {
+    background: #6d746f;
+    border-color: #6d746f;
+    cursor: default;
+  }
+
+  .dityy-status-pill {
+    background: #f3f3f1;
+    border: 1px solid #d7d9d3;
+    border-radius: 999px;
+    color: #626963;
+    font-size: 12px;
+    font-weight: 750;
+    padding: 6px 10px;
+  }
+
+  .dityy-status-pill--live {
+    background: #e9f7ec;
+    border-color: #bde4c4;
+    color: #126225;
   }
 
   .dityy-danger {
@@ -2090,6 +2224,24 @@ const adminStyles = `
     gap: 14px;
     border-top: 1px solid #ecece8;
     padding: 18px 14px 22px;
+  }
+
+  .dityy-logic-card {
+    background: #f7f8f5;
+    border: 1px solid #dce2da;
+    border-radius: 9px;
+    display: grid;
+    gap: 4px;
+    padding: 12px;
+  }
+
+  .dityy-logic-card strong {
+    color: #1f2421;
+  }
+
+  .dityy-logic-card span {
+    color: #606762;
+    line-height: 1.45;
   }
 
   .dityy-field-grid,
@@ -2329,6 +2481,31 @@ const adminStyles = `
     display: grid;
     gap: 28px;
     grid-template-columns: 1fr 1fr;
+  }
+
+  .dityy-preview-page--home {
+    display: grid;
+    gap: 18px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .dityy-preview-page--home strong {
+    font-size: 28px;
+    grid-column: 1 / -1;
+  }
+
+  .dityy-preview-page--home span {
+    background: #efefef;
+    border-radius: 10px;
+    display: block;
+    grid-column: 1 / -1;
+    height: 180px;
+  }
+
+  .dityy-preview-page--home div {
+    background: #efefef;
+    border-radius: 10px;
+    min-height: 150px;
   }
 
   .dityy-preview-media,
