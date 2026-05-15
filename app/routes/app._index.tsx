@@ -464,6 +464,11 @@ const emptyIntegrations = (): IntegrationConfig => ({
   mailchimpListId: "",
 });
 
+const formatLeadDate = (value: string) => {
+  const [date = "", time = ""] = value.split("T");
+  return `${date} ${time.slice(0, 5)} UTC`.trim();
+};
+
 const getAppUrl = (request: Request) =>
   process.env.SHOPIFY_APP_URL || new URL(request.url).origin;
 
@@ -962,7 +967,7 @@ export default function Index() {
 
   return (
     <s-page heading="Dityy Popup Manager">
-      <s-button slot="primary-action" onClick={savePopups} {...(isSaving ? { loading: true } : {})}>
+      <s-button slot="primary-action" variant="primary" onClick={savePopups} {...(isSaving ? { loading: true } : {})}>
         Save popups
       </s-button>
 
@@ -1524,7 +1529,7 @@ export default function Index() {
                             <div key={lead.id} className="dityy-lead-row">
                               <span>{lead.email || "No email"}</span>
                               <span>{lead.phone || "No phone"}</span>
-                              <small>{new Date(lead.createdAt).toLocaleString()}</small>
+                              <small>{formatLeadDate(lead.createdAt)}</small>
                             </div>
                           ))
                         )}
