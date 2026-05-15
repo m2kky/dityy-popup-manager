@@ -19,6 +19,8 @@
     popups: Array.isArray(popups) ? popups : [],
     rejected: [],
     eligible: [],
+    shown: [],
+    viewed: [],
     parseError,
   };
 
@@ -81,6 +83,46 @@
       body: payload,
       keepalive: true,
     }).catch(function () {});
+  };
+
+  const rememberDebug = (key, popup, extra) => {
+    if (!window.DityyPopupManager[key]) window.DityyPopupManager[key] = [];
+    window.DityyPopupManager[key].push({
+      id: popup.id,
+      name: popup.name,
+      displayType: popup.displayType,
+      pageMode: popup.pageMode,
+      path,
+      ...(extra || {}),
+    });
+  };
+
+  const trackVisibleView = (element, popup) => {
+    let tracked = false;
+    const sendView = (source) => {
+      if (tracked) return;
+      tracked = true;
+      rememberDebug("viewed", popup, { source });
+      track(popup, "view", { source });
+    };
+
+    if (!("IntersectionObserver" in window)) {
+      window.setTimeout(() => sendView("fallback"), 400);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (entry && entry.isIntersecting && entry.intersectionRatio >= 0.25) {
+          observer.disconnect();
+          sendView("visible");
+        }
+      },
+      { threshold: [0.25, 0.5, 0.75] },
+    );
+
+    observer.observe(element);
   };
 
   const matchesDevice = (popup) => {
@@ -407,6 +449,7 @@
     isModalOpen = true;
     hasShownModal = true;
     markShown(popup);
+    rememberDebug("shown", popup, { source: "popup" });
     track(popup, "view");
     document.documentElement.classList.add("dityy-popup-lock");
 
@@ -426,7 +469,9 @@
     closeButton.addEventListener("click", () => closeModal(popup));
 
     modal.appendChild(closeButton);
-    modal.appendChild(buildCampaign(popup, "dityy-popup-card--popup"));
+    const card = buildCampaign(popup, "dityy-popup-card--popup");
+    card.setAttribute("data-dityy-popup-id", popup.id);
+    modal.appendChild(card);
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
 
@@ -439,8 +484,9 @@
     if (!canShowByFrequency(popup)) return;
 
     markShown(popup);
-    track(popup, "view");
     const bar = buildCampaign(popup, "dityy-popup-card--bar dityy-popup-card--" + (popup.position || "top"));
+    bar.setAttribute("data-dityy-popup-id", popup.id);
+    rememberDebug("shown", popup, { source: "bar" });
     const closeButton = document.createElement("button");
     closeButton.className = "dityy-popup-card__close dityy-popup-card__close--bar";
     closeButton.type = "button";
@@ -451,14 +497,16 @@
     });
     bar.appendChild(closeButton);
     document.body.appendChild(bar);
+    trackVisibleView(bar, popup);
   };
 
   const showEmbed = (popup) => {
     if (!canShowByFrequency(popup)) return;
 
     markShown(popup);
-    track(popup, "view");
     const embed = buildCampaign(popup, "dityy-popup-card--embed");
+    embed.setAttribute("data-dityy-popup-id", popup.id);
+    rememberDebug("shown", popup, { source: "embed" });
     const target =
       document.querySelector(".product-form") ||
       document.querySelector("main") ||
@@ -469,6 +517,7 @@
     } else {
       target.parentNode.insertBefore(embed, target.nextSibling);
     }
+    trackVisibleView(embed, popup);
   };
 
   const rejectionReason = (popup) => {
@@ -503,6 +552,23 @@
     displayType: popup.displayType,
     pageMode: popup.pageMode,
   }));
+  window.DityyPopupManager.resetFrequency = function () {
+    popups.forEach((popup) => {
+      if (!popup || !popup.id) return;
+      window.sessionStorage.removeItem(storageKey(popup));
+      window.localStorage.removeItem(storageKey(popup));
+      window.localStorage.removeItem(variantStorageKey(popup));
+    });
+    window.location.reload();
+  };
+  window.DityyPopupManager.findElements = function () {
+    return Array.from(document.querySelectorAll(".dityy-popup-card")).map((element) => ({
+      id: element.getAttribute("data-dityy-popup-id") || "",
+      className: element.className,
+      text: element.textContent.trim().slice(0, 120),
+      rect: element.getBoundingClientRect().toJSON ? element.getBoundingClientRect().toJSON() : element.getBoundingClientRect(),
+    }));
+  };
 
   if (!eligiblePopups.length) {
     console.info("[Dityy Popup Manager] No campaign matched this page.", rejectedPopups);
