@@ -1,6 +1,6 @@
 {{ 'dityy-popups.css' | asset_url | stylesheet_tag }}
 
-{%- assign dityy_popups_config = app.metafields.dityy_popups.config.value | default: '[]' -%}
+{%- assign dityy_popups_config = app.metafields.dityy_popups.config_json.value | default: '[]' -%}
 {%- assign dityy_product_tags = product.tags | join: ',' | default: '' -%}
 {%- assign dityy_collection_handle = collection.handle | default: '' -%}
 {%- assign dityy_customer_tags = customer.tags | join: ',' | default: '' -%}

@@ -5,14 +5,29 @@
   const root = roots[0];
   const eventsUrl = root.getAttribute("data-events-url") || "";
   let popups = [];
+  let parseError = "";
 
   try {
     popups = JSON.parse(root.getAttribute("data-config") || "[]");
   } catch (error) {
+    parseError = error && error.message ? error.message : "Invalid popup configuration";
     popups = [];
   }
 
-  if (!Array.isArray(popups) || !popups.length) return;
+  window.DityyPopupManager = {
+    root,
+    popups: Array.isArray(popups) ? popups : [],
+    rejected: [],
+    eligible: [],
+    parseError,
+  };
+
+  if (!Array.isArray(popups) || !popups.length) {
+    if (parseError) {
+      console.warn("[Dityy Popup Manager] Could not parse popup config:", parseError);
+    }
+    return;
+  }
 
   const pageType = root.getAttribute("data-page-type") || "";
   const path = root.getAttribute("data-path") || window.location.pathname;
@@ -29,6 +44,17 @@
   const language = String(root.getAttribute("data-language") || "").trim().toLowerCase();
   let isModalOpen = false;
   let hasShownModal = false;
+
+  window.DityyPopupManager.context = {
+    pageType,
+    path,
+    cartSubtotal,
+    productTags,
+    collectionHandle,
+    customerTags,
+    country,
+    language,
+  };
 
   const track = (popup, type, extra) => {
     if (!eventsUrl || !popup || !popup.id) return;
@@ -445,13 +471,43 @@
     }
   };
 
+  const rejectionReason = (popup) => {
+    if (!popup) return "Invalid campaign data.";
+    if (!popup.enabled) return "Campaign is disabled.";
+    if (!matchesPage(popup)) return "Page rule does not match this page.";
+    if (!matchesDevice(popup)) return "Device rule does not match this screen size.";
+    if (!matchesCart(popup)) return "Cart subtotal rule does not match this cart.";
+    if (!matchesSchedule(popup)) return "Campaign schedule is not active now.";
+    if (!matchesAdvancedRules(popup)) return "Advanced targeting rules do not match this page/customer.";
+    if (!canShowByFrequency(popup)) return "Frequency rule has already shown this campaign.";
+    return "";
+  };
+
+  const rejectedPopups = popups
+    .map((popup) => ({
+      id: popup && popup.id,
+      name: popup && popup.name,
+      reason: rejectionReason(popup),
+    }))
+    .filter((item) => item.reason);
+
   const eligiblePopups = popups
-    .filter((popup) => popup && popup.enabled && matchesPage(popup) && matchesDevice(popup) && matchesCart(popup) && matchesSchedule(popup) && matchesAdvancedRules(popup))
-    .filter(canShowByFrequency)
+    .filter((popup) => !rejectionReason(popup))
     .map(withVariant)
     .sort((first, second) => Number(second.priority || 0) - Number(first.priority || 0));
 
-  if (!eligiblePopups.length) return;
+  window.DityyPopupManager.rejected = rejectedPopups;
+  window.DityyPopupManager.eligible = eligiblePopups.map((popup) => ({
+    id: popup.id,
+    name: popup.name,
+    displayType: popup.displayType,
+    pageMode: popup.pageMode,
+  }));
+
+  if (!eligiblePopups.length) {
+    console.info("[Dityy Popup Manager] No campaign matched this page.", rejectedPopups);
+    return;
+  }
 
   const renderCampaign = (popup) => {
     if (popup.displayType === "bar") {

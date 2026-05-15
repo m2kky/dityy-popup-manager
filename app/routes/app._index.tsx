@@ -17,6 +17,7 @@ import { authenticate } from "../shopify.server";
 
 const POPUP_NAMESPACE = "dityy_popups";
 const POPUP_KEY = "config";
+const POPUP_JSON_KEY = "config_json";
 const uploadDir = process.env.UPLOAD_DIR || "/data/uploads";
 const INTEGRATIONS_SETTING_KEY = "integrations";
 
@@ -477,12 +478,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           metafield(namespace: "${POPUP_NAMESPACE}", key: "${POPUP_KEY}") {
             value
           }
+          jsonMetafield: metafield(namespace: "${POPUP_NAMESPACE}", key: "${POPUP_JSON_KEY}") {
+            value
+          }
         }
       }`,
   );
   const json = await response.json();
   const appInstallation = json.data.currentAppInstallation;
-  const rawValue = appInstallation.metafield?.value;
+  const rawValue = appInstallation.jsonMetafield?.value || appInstallation.metafield?.value;
 
   let popups: PopupConfig[] = [];
   if (rawValue) {
@@ -648,6 +652,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return { ok: false, error: "Popup data is not valid JSON." } satisfies ActionData;
   }
 
+  const popupPayload = JSON.stringify(popups);
   const response = await admin.graphql(
     `#graphql
       mutation DityySavePopupConfig($metafields: [MetafieldsSetInput!]!) {
@@ -671,7 +676,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             namespace: POPUP_NAMESPACE,
             key: POPUP_KEY,
             type: "json",
-            value: JSON.stringify(popups),
+            value: popupPayload,
+          },
+          {
+            ownerId: appInstallationId,
+            namespace: POPUP_NAMESPACE,
+            key: POPUP_JSON_KEY,
+            type: "multi_line_text_field",
+            value: popupPayload,
           },
         ],
       },
@@ -744,6 +756,36 @@ export default function Index() {
   const activeLeadRate = activeStats.views ? Math.round((activeStats.leads / activeStats.views) * 1000) / 10 : 0;
   const activeVariantStats = activePopup ? loaderData.variantStats[activePopup.id] || emptyVariantStats() : emptyVariantStats();
   const activeDailyStats = activePopup ? loaderData.dailyStats[activePopup.id] || [] : [];
+  const visibilityNotes = activePopup
+    ? [
+        activePopup.displayType === "popup"
+          ? `Popup opens ${activePopup.trigger === "delay" ? `after ${activePopup.delaySeconds}s` : activePopup.trigger === "scroll" ? `after ${activePopup.scrollPercent}% scroll` : "on exit intent"}.`
+          : activePopup.displayType === "bar"
+            ? `Bar appears fixed at the ${activePopup.position === "bottom" ? "bottom" : "top"} as soon as rules match.`
+            : "Embed appears inline after the product form, or after the main page content if there is no product form.",
+        activePopup.pageMode === "all"
+          ? "Page rule: all pages."
+          : activePopup.pageMode === "url_contains"
+            ? `Page rule: URLs containing "${activePopup.urlContains || "..."}".`
+            : `Page rule: ${activePopup.pageMode} page.`,
+      ]
+    : [];
+  const visibilityWarnings = activePopup
+    ? [
+        activePopup.pageMode !== "product" && activePopup.productTags.trim()
+          ? "Product tags only exist on product pages. This rule can block home/cart/collection pages."
+          : "",
+        activePopup.pageMode !== "collection" && activePopup.collectionHandles.trim()
+          ? "Collection handles only exist on collection pages. This rule can block other pages."
+          : "",
+        activePopup.cartMinSubtotal > 0 && activePopup.pageMode !== "cart"
+          ? "Cart subtotal can be 0 on normal page loads. A minimum cart value can hide this campaign."
+          : "",
+        activePopup.displayType !== "popup" && activePopup.trigger !== "delay"
+          ? "Scroll and exit triggers only apply to popups. Bars and embeds render immediately when rules match."
+          : "",
+      ].filter(Boolean)
+    : [];
   const isSaving = saveFetcher.state !== "idle";
   const isUploading = uploadFetcher.state !== "idle";
 
@@ -849,6 +891,11 @@ export default function Index() {
       },
       { method: "POST" },
     );
+  };
+
+  const saveActivePopup = () => {
+    if (!activePopup) return;
+    savePopups();
   };
 
   const exportActiveLeads = () => {
@@ -1032,6 +1079,9 @@ export default function Index() {
                   </p>
                 </div>
                 <div className="dityy-actions">
+                  <button type="button" className="dityy-primary" onClick={saveActivePopup} disabled={isSaving}>
+                    Save this campaign
+                  </button>
                   <button type="button" className="dityy-secondary" onClick={() => duplicatePopup(activePopup.id)}>
                     Duplicate
                   </button>
@@ -1528,6 +1578,15 @@ export default function Index() {
                     </div>
                   </div>
                   <div className={`dityy-preview-stage dityy-preview-stage--${previewDevice}`}>
+                    <div className="dityy-placement-note">
+                      <strong>Where this appears</strong>
+                      {visibilityNotes.map((note) => (
+                        <span key={note}>{note}</span>
+                      ))}
+                      {visibilityWarnings.map((warning) => (
+                        <em key={warning}>{warning}</em>
+                      ))}
+                    </div>
                     {previewMode === "product" ? (
                       <div className="dityy-preview-page dityy-preview-page--product">
                         <div className="dityy-preview-media" />
@@ -1876,6 +1935,7 @@ const adminStyles = `
     gap: 8px;
   }
 
+  .dityy-primary,
   .dityy-secondary,
   .dityy-danger {
     background: #fff;
@@ -1884,6 +1944,12 @@ const adminStyles = `
     cursor: pointer;
     min-height: 36px;
     padding: 7px 12px;
+  }
+
+  .dityy-primary {
+    background: #101513;
+    border-color: #101513;
+    color: #fff;
   }
 
   .dityy-danger {
@@ -2207,8 +2273,37 @@ const adminStyles = `
       linear-gradient(135deg, rgba(119,200,167,.18), transparent 32%),
       #efeee8;
     min-height: 716px;
-    padding: 48px 54px;
+    padding: 124px 54px 48px;
     position: relative;
+  }
+
+  .dityy-placement-note {
+    background: rgba(255,255,255,.92);
+    border: 1px solid #dedfd8;
+    border-radius: 8px;
+    display: grid;
+    gap: 4px;
+    left: 54px;
+    padding: 10px 12px;
+    position: absolute;
+    right: 54px;
+    top: 24px;
+    z-index: 3;
+  }
+
+  .dityy-placement-note strong {
+    font-size: 12px;
+  }
+
+  .dityy-placement-note span,
+  .dityy-placement-note em {
+    color: #626963;
+    font-size: 12px;
+    font-style: normal;
+  }
+
+  .dityy-placement-note em {
+    color: #9a3412;
   }
 
   .dityy-preview-stage--mobile {
