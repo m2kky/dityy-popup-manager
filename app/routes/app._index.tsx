@@ -408,7 +408,7 @@ const createGrowthPlanCampaigns = (assetBaseUrl: string): PopupConfig[] => [
     backgroundColor: "#0f3d2e",
     textColor: "#ffffff",
     accentColor: "#f3d35b",
-    buttonColor: "#f3d35b",
+    buttonColor: "#111111",
     borderRadius: 0,
     spacing: 14,
     freeShippingThreshold: 1800,
