@@ -165,6 +165,18 @@
     return true;
   };
 
+  const formatMoney = (amount) => "EGP " + Math.round(Number(amount) || 0).toLocaleString("en-US");
+
+  const tokenText = (value, popup) => {
+    const threshold = Number(popup.freeShippingThreshold || 0) || 1800;
+    const remaining = Math.max(0, threshold - cartSubtotal);
+
+    return String(value || "")
+      .replaceAll("{remaining_free_shipping}", remaining > 0 ? formatMoney(remaining) : "0")
+      .replaceAll("{free_shipping_threshold}", formatMoney(threshold))
+      .replaceAll("{cart_total}", formatMoney(cartSubtotal));
+  };
+
   const matchesSchedule = (popup) => {
     const now = Date.now();
     const startsAt = popup.startsAt ? new Date(popup.startsAt).getTime() : 0;
@@ -324,20 +336,23 @@
     content.className = "dityy-popup-card__content";
 
     if (popup.title) {
-      content.appendChild(textNode("h2", "dityy-popup-card__title", popup.title));
+      content.appendChild(textNode("h2", "dityy-popup-card__title", tokenText(popup.title, popup)));
     }
 
     let bodyElement = null;
     if (popup.body || popup.campaignType === "multi_announcement") {
-      const messages = Array.isArray(popup.messages) && popup.messages.length ? popup.messages : [popup.body || ""];
-      bodyElement = textNode("p", "dityy-popup-card__body", messages[0] || popup.body || "");
+      const messages =
+        popup.campaignType === "multi_announcement" && Array.isArray(popup.messages) && popup.messages.length
+          ? popup.messages
+          : [popup.body || ""];
+      bodyElement = textNode("p", "dityy-popup-card__body", tokenText(messages[0] || popup.body || "", popup));
       content.appendChild(bodyElement);
 
       if (popup.campaignType === "multi_announcement" && messages.length > 1) {
         let index = 0;
         window.setInterval(() => {
           index = (index + 1) % messages.length;
-          bodyElement.textContent = messages[index];
+          bodyElement.textContent = tokenText(messages[index], popup);
         }, 3500);
       }
     }

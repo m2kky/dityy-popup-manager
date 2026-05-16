@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="520" viewBox="0 0 900 520" role="img" aria-label="First order discount campaign artwork">
+  <rect width="900" height="520" fill="#fffdf7"/>
+  <rect x="88" y="96" width="724" height="328" rx="32" fill="#e7f1dc"/>
+  <path d="M88 168c84 28 142 28 226 0s142-28 226 0 142 28 272 0v256H88z" fill="#ffffff" opacity=".58"/>
+  <circle cx="704" cy="164" r="66" fill="#f3d35b"/>
+  <path d="M246 236h408v106H246z" fill="#111111"/>
+  <path d="M246 236c30 0 54-24 54-54h300c0 30 24 54 54 54v106c-30 0-54 24-54 54H300c0-30-24-54-54-54z" fill="#fffdf7"/>
+  <text x="450" y="288" fill="#111111" font-family="Arial, sans-serif" font-size="52" font-weight="900" text-anchor="middle">DIET10</text>
+  <text x="450" y="326" fill="#4f7d25" font-family="Arial, sans-serif" font-size="24" font-weight="700" text-anchor="middle">FIRST ORDER CODE</text>
+  <path d="M164 120h68M668 408h92M146 388h52" stroke="#4f7d25" stroke-width="12" stroke-linecap="round"/>
+</svg>

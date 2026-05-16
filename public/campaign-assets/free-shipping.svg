@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="420" viewBox="0 0 900 420" role="img" aria-label="Free shipping campaign artwork">
+  <rect width="900" height="420" fill="#0f3d2e"/>
+  <circle cx="755" cy="80" r="92" fill="#f3d35b" opacity=".18"/>
+  <circle cx="118" cy="330" r="135" fill="#ffffff" opacity=".08"/>
+  <path d="M190 242h310l34-100h112l72 74v26h42v64h-55a56 56 0 0 0-110 0H357a56 56 0 0 0-110 0h-57z" fill="#fffdf7"/>
+  <path d="M542 162h78l46 46H526z" fill="#dcebd7"/>
+  <path d="M238 164h258l-24 70H214z" fill="#f3d35b"/>
+  <circle cx="302" cy="306" r="34" fill="#0f3d2e"/>
+  <circle cx="650" cy="306" r="34" fill="#0f3d2e"/>
+  <circle cx="302" cy="306" r="13" fill="#fffdf7"/>
+  <circle cx="650" cy="306" r="13" fill="#fffdf7"/>
+  <path d="M178 126h178M142 168h178M118 210h178" stroke="#fffdf7" stroke-width="18" stroke-linecap="round" opacity=".84"/>
+  <text x="452" y="102" fill="#fffdf7" font-family="Arial, sans-serif" font-size="44" font-weight="800" text-anchor="middle">FREE SHIPPING</text>
+</svg>

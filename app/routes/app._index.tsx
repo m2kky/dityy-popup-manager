@@ -107,6 +107,7 @@ type PopupConfig = {
   urlContains: string;
   cartMinSubtotal: number;
   cartMaxSubtotal: number;
+  freeShippingThreshold: number;
   productTags: string;
   collectionHandles: string;
   customerTags: string;
@@ -136,6 +137,7 @@ type PopupConfig = {
 };
 
 type LoaderData = {
+  appUrl: string;
   appInstallationId: string;
   popups: PopupConfig[];
   stats: Record<string, PopupStats>;
@@ -356,6 +358,7 @@ const defaultPopup = (): PopupConfig => ({
   urlContains: "",
   cartMinSubtotal: 0,
   cartMaxSubtotal: 0,
+  freeShippingThreshold: 1800,
   productTags: "",
   collectionHandles: "",
   customerTags: "",
@@ -383,6 +386,123 @@ const defaultPopup = (): PopupConfig => ({
   variantBBody: "Use this alternate message for A/B testing.",
   variantBPrimaryLabel: "Learn more",
 });
+
+const createGrowthPlanCampaigns = (assetBaseUrl: string): PopupConfig[] => [
+  {
+    ...defaultPopup(),
+    id: "plan-free-shipping-bar",
+    enabled: false,
+    name: "Free shipping bar",
+    campaignType: "free_shipping",
+    displayType: "bar",
+    title: "باقي {remaining_free_shipping} والشحن يبقى مجاني",
+    body: "الشحن مجاني للطلبات فوق {free_shipping_threshold}. كمل سلتك واستفيد من العرض.",
+    primaryLabel: "كمل التسوق",
+    primaryUrl: "/collections/all",
+    pageMode: "all",
+    frequency: "always",
+    position: "top",
+    priority: 100,
+    templateStyle: "dark",
+    imageUrl: `${assetBaseUrl}/free-shipping.svg`,
+    backgroundColor: "#0f3d2e",
+    textColor: "#ffffff",
+    accentColor: "#f3d35b",
+    buttonColor: "#f3d35b",
+    borderRadius: 0,
+    spacing: 14,
+    freeShippingThreshold: 1800,
+  },
+  {
+    ...defaultPopup(),
+    id: "plan-first-order-popup",
+    enabled: false,
+    name: "First order lead popup",
+    campaignType: "email_signup",
+    displayType: "popup",
+    title: "خصم أول طلب ليك",
+    body: "سيب رقمك وخد كود خصم تستخدمه في أول أوردر. هنوصلك بالعروض الجديدة والمنتجات المناسبة ليك.",
+    primaryLabel: "تسوق المنتجات",
+    primaryUrl: "/collections/all",
+    couponCode: "DIET10",
+    collectName: true,
+    collectPhone: true,
+    collectEmail: false,
+    leadButtonLabel: "ابعتلي الكود",
+    successMessage: "تم التسجيل. الكود جاهز قدامك وتقدر تستخدمه دلوقتي.",
+    privacyText: "أوافق على استقبال عروض دايتي من خلال واتساب أو الرسائل.",
+    trigger: "delay",
+    delaySeconds: 7,
+    frequency: "days",
+    frequencyDays: 7,
+    templateStyle: "coupon",
+    imageUrl: `${assetBaseUrl}/first-order.svg`,
+    imagePosition: "top",
+    backgroundColor: "#fffdf7",
+    textColor: "#151713",
+    accentColor: "#4f7d25",
+    buttonColor: "#111111",
+    borderRadius: 18,
+    spacing: 18,
+    priority: 80,
+  },
+  {
+    ...defaultPopup(),
+    id: "plan-cart-recovery-popup",
+    enabled: false,
+    name: "Cart urgency popup",
+    campaignType: "announcement",
+    displayType: "popup",
+    title: "طلبك لسه مستنيك",
+    body: "كمّل الأوردر دلوقتي. لو وصلت لـ {free_shipping_threshold} هتاخد الشحن مجاني، والباقي عندك تقريباً {remaining_free_shipping}.",
+    primaryLabel: "كمّل الطلب",
+    primaryUrl: "/checkout",
+    pageMode: "cart",
+    trigger: "delay",
+    delaySeconds: 10,
+    frequency: "session",
+    position: "bottom",
+    templateStyle: "minimal",
+    imageUrl: `${assetBaseUrl}/cart-recovery.svg`,
+    imagePosition: "left",
+    backgroundColor: "#ffffff",
+    textColor: "#191c19",
+    accentColor: "#0f6b57",
+    buttonColor: "#0f6b57",
+    borderRadius: 16,
+    spacing: 18,
+    freeShippingThreshold: 1800,
+    priority: 70,
+  },
+  {
+    ...defaultPopup(),
+    id: "plan-cross-sell-embed",
+    enabled: false,
+    name: "Product cross-sell embed",
+    campaignType: "cross_sell",
+    displayType: "embed",
+    title: "كمّل الباكدج بسناك صحي",
+    body: "اختار سناك مناسب مع المنتج ده وارفع قيمة السلة عشان تقرب من الشحن المجاني.",
+    messages: ["منتجات بروتين وسناك مناسبة للطلب", "كمل لـ {free_shipping_threshold} وخد الشحن مجاني"],
+    primaryLabel: "شوف السناكس",
+    primaryUrl: "/collections/snacks",
+    pageMode: "product",
+    frequency: "always",
+    templateStyle: "split",
+    imageUrl: `${assetBaseUrl}/snack-bundle.svg`,
+    imagePosition: "left",
+    embedPlacement: "custom",
+    embedSelector: ".product-form",
+    backgroundColor: "#f5f8ef",
+    textColor: "#132018",
+    accentColor: "#5d8f24",
+    buttonColor: "#111111",
+    borderRadius: 14,
+    spacing: 16,
+    freeShippingThreshold: 1800,
+    priority: 60,
+  },
+];
 
 const numberOrDefault = (value: unknown, fallback: number) => {
   const parsed = Number(value);
@@ -461,6 +581,7 @@ const parsePopups = (value: unknown): PopupConfig[] => {
       urlContains: stringOrDefault(record.urlContains),
       cartMinSubtotal: Math.max(0, numberOrDefault(record.cartMinSubtotal, 0)),
       cartMaxSubtotal: Math.max(0, numberOrDefault(record.cartMaxSubtotal, 0)),
+      freeShippingThreshold: Math.max(0, numberOrDefault(record.freeShippingThreshold, base.freeShippingThreshold)),
       productTags: stringOrDefault(record.productTags),
       collectionHandles: stringOrDefault(record.collectionHandles),
       customerTags: stringOrDefault(record.customerTags),
@@ -625,6 +746,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   return {
+    appUrl: getAppUrl(request).replace(/\/$/, ""),
     appInstallationId: appInstallation.id,
     popups,
     stats,
@@ -788,7 +910,16 @@ export default function Index() {
     JSON.stringify({ popups: loaderData.popups, integrations: loaderData.integrations }),
   );
 
+  const campaignAssetBaseUrl = `${loaderData.appUrl}/campaign-assets`;
+  const growthPlanCampaigns = useMemo(
+    () => createGrowthPlanCampaigns(campaignAssetBaseUrl),
+    [campaignAssetBaseUrl],
+  );
   const enabledCount = useMemo(() => popups.filter((popup) => popup.enabled).length, [popups]);
+  const installedPlanCount = useMemo(
+    () => growthPlanCampaigns.filter((campaign) => popups.some((popup) => popup.id === campaign.id)).length,
+    [growthPlanCampaigns, popups],
+  );
   const currentSnapshot = useMemo(() => JSON.stringify({ popups, integrations }), [popups, integrations]);
   const hasUnsavedChanges = currentSnapshot !== savedSnapshot;
   const activePopup = popups.find((popup) => popup.id === activeId) ?? null;
@@ -824,13 +955,26 @@ export default function Index() {
   const activeLeadRate = activeStats.views ? Math.round((activeStats.leads / activeStats.views) * 1000) / 10 : 0;
   const activeVariantStats = activePopup ? loaderData.variantStats[activePopup.id] || emptyVariantStats() : emptyVariantStats();
   const activeDailyStats = activePopup ? loaderData.dailyStats[activePopup.id] || [] : [];
+  const previewCartSubtotal = previewMode === "cart" ? 920 : 0;
+  const previewText = (value: string) => {
+    if (!activePopup) return value;
+
+    const threshold = activePopup.freeShippingThreshold || 1800;
+    const remaining = Math.max(0, threshold - previewCartSubtotal);
+    const formatAmount = (amount: number) => `EGP ${Math.round(amount).toLocaleString("en-US")}`;
+
+    return value
+      .replaceAll("{remaining_free_shipping}", remaining > 0 ? formatAmount(remaining) : "0")
+      .replaceAll("{free_shipping_threshold}", formatAmount(threshold))
+      .replaceAll("{cart_total}", formatAmount(previewCartSubtotal));
+  };
   const visibilityNotes = activePopup
     ? [
         activePopup.displayType === "popup"
           ? `Popup opens ${activePopup.trigger === "delay" ? `after ${activePopup.delaySeconds}s` : activePopup.trigger === "scroll" ? `after ${activePopup.scrollPercent}% scroll` : "on exit intent"}.`
           : activePopup.displayType === "bar"
             ? `Bar appears fixed at the ${activePopup.position === "bottom" ? "bottom" : "top"} as soon as rules match.`
-            : "Embed appears inline after the product form, or after the main page content if there is no product form.",
+            : `Embed placement: ${embedPlacements.find((placement) => placement.id === activePopup.embedPlacement)?.label || "After first section"}.`,
         activePopup.pageMode === "all"
           ? "Page rule: all pages."
           : activePopup.pageMode === "url_contains"
@@ -1014,6 +1158,26 @@ export default function Index() {
     savePopups();
   };
 
+  const installGrowthPlanCampaigns = () => {
+    const existingIds = new Set(popups.map((popup) => popup.id));
+    const additions = growthPlanCampaigns.filter((campaign) => !existingIds.has(campaign.id));
+    const firstPlanId = growthPlanCampaigns[0]?.id ?? null;
+
+    if (!additions.length) {
+      setActiveId(firstPlanId);
+      setStep("editor");
+      setPanelView("menu");
+      return;
+    }
+
+    const nextPopups = [...popups, ...additions];
+    setPopups(nextPopups);
+    setActiveId(additions[0].id);
+    setStep("editor");
+    setPanelView("menu");
+    savePopups(nextPopups);
+  };
+
   const setActivePublished = (enabled: boolean) => {
     if (!activePopup) return;
 
@@ -1108,6 +1272,10 @@ export default function Index() {
             <span><strong>{Object.values(loaderData.stats).reduce((total, item) => total + item.views, 0)}</strong> views</span>
             <span><strong>{Object.values(loaderData.stats).reduce((total, item) => total + item.leads, 0)}</strong> leads</span>
           </div>
+          <button type="button" className="dityy-plan-button" onClick={installGrowthPlanCampaigns} disabled={isSaving}>
+            <strong>{installedPlanCount === growthPlanCampaigns.length ? "Plan installed" : "Add growth plan"}</strong>
+            <small>{installedPlanCount}/{growthPlanCampaigns.length} recommended campaigns</small>
+          </button>
           <div className="dityy-campaign-strip">
             {popups.map((popup) => (
               <button
@@ -1139,6 +1307,24 @@ export default function Index() {
                 <div>
                   <h2>Select campaign type</h2>
                   <p>Start with a campaign goal. You can change behavior later.</p>
+                </div>
+              </div>
+              <div className="dityy-plan-card">
+                <div>
+                  <strong>Recommended launch sequence</strong>
+                  <span>Four paused campaigns built for the current sales plan. Add them, review the preview, then publish each one when ready.</span>
+                </div>
+                <button type="button" className="dityy-primary" onClick={installGrowthPlanCampaigns} disabled={isSaving}>
+                  {installedPlanCount === growthPlanCampaigns.length ? "Open plan" : "Add 4 campaigns"}
+                </button>
+                <div className="dityy-plan-grid">
+                  {growthPlanCampaigns.map((campaign) => (
+                    <article key={campaign.id}>
+                      <img src={campaign.imageUrl} alt="" />
+                      <strong>{campaign.name}</strong>
+                      <small>{campaign.displayType} · {campaign.pageMode === "all" ? "all pages" : `${campaign.pageMode} page`}</small>
+                    </article>
+                  ))}
                 </div>
               </div>
               <div className="dityy-option-grid">
@@ -1333,6 +1519,12 @@ export default function Index() {
                         Coupon code
                         <input value={activePopup.couponCode} placeholder="DIET10" onChange={(event) => updatePopup(activePopup.id, "couponCode", event.currentTarget.value.toUpperCase())} />
                       </label>
+                      {activePopup.campaignType === "free_shipping" && (
+                        <label>
+                          Free shipping threshold
+                          <input type="number" min={0} value={activePopup.freeShippingThreshold} onChange={(event) => updatePopup(activePopup.id, "freeShippingThreshold", Number(event.currentTarget.value))} />
+                        </label>
+                      )}
                       <label>
                         Image URL
                         <input value={activePopup.imageUrl} onChange={(event) => updatePopup(activePopup.id, "imageUrl", event.currentTarget.value)} />
@@ -1794,12 +1986,12 @@ export default function Index() {
                     <div className={`dityy-preview-campaign dityy-preview-campaign--${activePopup.displayType} dityy-preview-campaign--${activePopup.position} dityy-preview-campaign--${activePopup.templateStyle} dityy-preview-campaign--image-${activePopup.imagePosition} dityy-preview-campaign--font-${activePopup.fontFamily}`} style={previewStyle}>
                       {activePopup.imageUrl && <img src={activePopup.imageUrl} alt="" />}
                       <div>
-                        <strong>{activePopup.title || "Your headline goes here"}</strong>
-                        <p>{activePopup.body || "Your description goes here"}</p>
+                        <strong>{previewText(activePopup.title || "Your headline goes here")}</strong>
+                        <p>{previewText(activePopup.body || "Your description goes here")}</p>
                         {activePopup.campaignType === "multi_announcement" && activePopup.messages.length > 0 && (
                           <div className="dityy-preview-messages">
                             {activePopup.messages.slice(0, 3).map((message) => (
-                              <span key={message}>{message}</span>
+                              <span key={message}>{previewText(message)}</span>
                             ))}
                           </div>
                         )}
@@ -1888,7 +2080,7 @@ const adminStyles = `
     color: #1f2421;
     display: grid;
     gap: 14px;
-    grid-template-columns: auto auto minmax(0, 1fr);
+    grid-template-columns: auto auto auto minmax(0, 1fr);
     margin: 0 auto 12px;
     max-width: 1500px;
     min-height: auto;
@@ -1947,6 +2139,24 @@ const adminStyles = `
     color: #101513;
     display: block;
     font-size: 20px;
+  }
+
+  .dityy-plan-button {
+    background: #eef4e8;
+    border: 1px solid #cbdcc0;
+    border-radius: 9px;
+    color: #1c281d;
+    cursor: pointer;
+    display: grid;
+    gap: 2px;
+    min-height: 52px;
+    min-width: 170px;
+    padding: 9px 12px;
+    text-align: left;
+  }
+
+  .dityy-plan-button small {
+    color: #5d695d;
   }
 
   .dityy-campaign-strip {
@@ -2039,6 +2249,57 @@ const adminStyles = `
     gap: 18px;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     margin-top: 22px;
+  }
+
+  .dityy-plan-card {
+    background: #f7f7f2;
+    border: 1px solid #dfe2dc;
+    border-radius: 10px;
+    display: grid;
+    gap: 16px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    margin-top: 20px;
+    padding: 16px;
+  }
+
+  .dityy-plan-card span {
+    color: #626a63;
+    display: block;
+    margin-top: 4px;
+  }
+
+  .dityy-plan-grid {
+    display: grid;
+    gap: 10px;
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .dityy-plan-grid article {
+    background: #fff;
+    border: 1px solid #e1e3dd;
+    border-radius: 8px;
+    padding: 10px;
+  }
+
+  .dityy-plan-grid img {
+    background: #eef1ea;
+    border-radius: 6px;
+    display: block;
+    height: 58px;
+    margin-bottom: 8px;
+    object-fit: cover;
+    width: 100%;
+  }
+
+  .dityy-plan-grid strong,
+  .dityy-plan-grid small {
+    display: block;
+  }
+
+  .dityy-plan-grid small {
+    color: #687069;
+    margin-top: 4px;
   }
 
   .dityy-display-grid {
@@ -2835,6 +3096,20 @@ const adminStyles = `
     .dityy-preview {
       min-height: auto;
       position: static;
+    }
+
+    .dityy-sidebar {
+      grid-template-columns: 1fr;
+    }
+
+    .dityy-plan-grid,
+    .dityy-option-grid,
+    .dityy-display-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .dityy-plan-card {
+      grid-template-columns: 1fr;
     }
   }
 `;

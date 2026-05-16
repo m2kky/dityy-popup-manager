@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="520" viewBox="0 0 900 520" role="img" aria-label="Healthy snack bundle campaign artwork">
+  <rect width="900" height="520" fill="#f5f8ef"/>
+  <rect x="110" y="110" width="220" height="280" rx="28" fill="#ffffff" stroke="#d6e0cc" stroke-width="8"/>
+  <rect x="352" y="80" width="220" height="330" rx="28" fill="#ffffff" stroke="#d6e0cc" stroke-width="8"/>
+  <rect x="594" y="128" width="196" height="250" rx="28" fill="#ffffff" stroke="#d6e0cc" stroke-width="8"/>
+  <rect x="148" y="162" width="144" height="74" rx="12" fill="#5d8f24"/>
+  <rect x="390" y="146" width="144" height="92" rx="12" fill="#111111"/>
+  <rect x="626" y="184" width="132" height="64" rx="12" fill="#f3d35b"/>
+  <path d="M168 292h104M410 292h104M646 292h92" stroke="#5d8f24" stroke-width="14" stroke-linecap="round"/>
+  <path d="M168 326h70M410 330h70M646 326h58" stroke="#111111" stroke-width="10" stroke-linecap="round" opacity=".5"/>
+  <text x="450" y="468" fill="#132018" font-family="Arial, sans-serif" font-size="42" font-weight="900" text-anchor="middle">SNACK BUNDLE</text>
+</svg>
