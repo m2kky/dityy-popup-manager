@@ -4,6 +4,9 @@
 
   const root = roots[0];
   const eventsUrl = root.getAttribute("data-events-url") || "";
+  const query = new URLSearchParams(window.location.search);
+  const previewId = query.get("dityy_preview") || "";
+  const isPreview = Boolean(previewId);
   let popups = [];
   let parseError = "";
 
@@ -21,6 +24,8 @@
     eligible: [],
     shown: [],
     viewed: [],
+    previewId,
+    isPreview,
     parseError,
   };
 
@@ -59,6 +64,7 @@
   };
 
   const track = (popup, type, extra) => {
+    if (isPreview) return;
     if (!eventsUrl || !popup || !popup.id) return;
 
     const payload = JSON.stringify({
@@ -200,6 +206,7 @@
   const storageKey = (popup) => "dityy-popup:" + popup.id;
 
   const canShowByFrequency = (popup) => {
+    if (isPreview) return true;
     if (popup.frequency === "always") return true;
 
     if (popup.frequency === "session") {
@@ -217,6 +224,7 @@
   };
 
   const markShown = (popup) => {
+    if (isPreview) return;
     if (popup.frequency === "session") {
       window.sessionStorage.setItem(storageKey(popup), "shown");
     }
@@ -500,6 +508,56 @@
     trackVisibleView(bar, popup);
   };
 
+  const insertAfter = (element, target) => {
+    if (!target || !target.parentNode) {
+      document.body.insertBefore(element, document.body.firstChild);
+      return;
+    }
+
+    target.parentNode.insertBefore(element, target.nextSibling);
+  };
+
+  const insertEmbed = (embed, popup) => {
+    const placement = popup.embedPlacement || "after_first_section";
+    const main = document.querySelector("main") || document.body;
+
+    if (placement === "custom" && popup.embedSelector) {
+      const customTarget = document.querySelector(popup.embedSelector);
+      if (customTarget) {
+        insertAfter(embed, customTarget);
+        return;
+      }
+    }
+
+    if (placement === "after_header") {
+      const header = document.querySelector("header, .shopify-section-header, [id*='shopify-section-header']");
+      insertAfter(embed, header || main.firstElementChild || main);
+      return;
+    }
+
+    if (placement === "before_footer") {
+      const footer = document.querySelector("footer, .shopify-section-footer, [id*='shopify-section-footer']");
+      if (footer && footer.parentNode) {
+        footer.parentNode.insertBefore(embed, footer);
+        return;
+      }
+      document.body.appendChild(embed);
+      return;
+    }
+
+    if (placement === "after_main") {
+      insertAfter(embed, main);
+      return;
+    }
+
+    const firstSection =
+      main.querySelector(".shopify-section:not([id*='footer']):not([id*='header'])") ||
+      main.querySelector("section") ||
+      main.firstElementChild ||
+      main;
+    insertAfter(embed, firstSection);
+  };
+
   const showEmbed = (popup) => {
     if (!canShowByFrequency(popup)) return;
 
@@ -507,21 +565,14 @@
     const embed = buildCampaign(popup, "dityy-popup-card--embed");
     embed.setAttribute("data-dityy-popup-id", popup.id);
     rememberDebug("shown", popup, { source: "embed" });
-    const target =
-      document.querySelector(".product-form") ||
-      document.querySelector("main") ||
-      document.body;
-
-    if (target === document.body) {
-      document.body.insertBefore(embed, document.body.firstChild);
-    } else {
-      target.parentNode.insertBefore(embed, target.nextSibling);
-    }
+    insertEmbed(embed, popup);
     trackVisibleView(embed, popup);
   };
 
   const rejectionReason = (popup) => {
     if (!popup) return "Invalid campaign data.";
+    if (previewId && popup.id !== previewId) return "Another campaign is selected for preview.";
+    if (previewId && popup.id === previewId) return "";
     if (!popup.enabled) return "Campaign is disabled.";
     if (!matchesPage(popup)) return "Page rule does not match this page.";
     if (!matchesDevice(popup)) return "Device rule does not match this screen size.";
@@ -590,6 +641,11 @@
   };
 
   const schedulePopup = (popup) => {
+    if (isPreview) {
+      renderCampaign(popup);
+      return;
+    }
+
     if (popup.displayType === "bar" || popup.displayType === "embed") {
       renderCampaign(popup);
       return;

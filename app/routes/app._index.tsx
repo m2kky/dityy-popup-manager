@@ -29,6 +29,12 @@ type CampaignType =
   | "cross_sell"
   | "countdown";
 type DisplayType = "popup" | "bar" | "embed";
+type EmbedPlacement =
+  | "after_header"
+  | "after_first_section"
+  | "after_main"
+  | "before_footer"
+  | "custom";
 type PopupPageMode =
   | "all"
   | "home"
@@ -82,6 +88,8 @@ type PopupConfig = {
   templateStyle: "clean" | "split" | "dark" | "coupon" | "minimal";
   imageUrl: string;
   imagePosition: "top" | "left" | "right" | "background";
+  embedPlacement: EmbedPlacement;
+  embedSelector: string;
   primaryLabel: string;
   primaryUrl: string;
   couponCode: string;
@@ -211,6 +219,38 @@ const displayTypes: Array<{
   },
 ];
 
+const embedPlacements: Array<{
+  id: EmbedPlacement;
+  label: string;
+  description: string;
+}> = [
+  {
+    id: "after_first_section",
+    label: "After first section",
+    description: "Good default for home pages and collection pages.",
+  },
+  {
+    id: "after_header",
+    label: "After header",
+    description: "Places the banner near the top of the page.",
+  },
+  {
+    id: "before_footer",
+    label: "Before footer",
+    description: "Places the banner near the end of the page.",
+  },
+  {
+    id: "after_main",
+    label: "After main content",
+    description: "Places the banner after the page main content.",
+  },
+  {
+    id: "custom",
+    label: "Custom selector",
+    description: "Use a CSS selector from the theme.",
+  },
+];
+
 type PopupPreset = {
   id: string;
   label: string;
@@ -297,6 +337,8 @@ const defaultPopup = (): PopupConfig => ({
   templateStyle: "clean",
   imageUrl: "",
   imagePosition: "top",
+  embedPlacement: "after_first_section",
+  embedSelector: "",
   primaryLabel: "Shop now",
   primaryUrl: "/collections/all",
   couponCode: "",
@@ -392,6 +434,12 @@ const parsePopups = (value: unknown): PopupConfig[] => {
       templateStyle: enumValue(record.templateStyle, ["clean", "split", "dark", "coupon", "minimal"] as const, "clean"),
       imageUrl: stringOrDefault(record.imageUrl),
       imagePosition: enumValue(record.imagePosition, ["top", "left", "right", "background"] as const, "top"),
+      embedPlacement: enumValue(
+        record.embedPlacement,
+        ["after_header", "after_first_section", "after_main", "before_footer", "custom"] as const,
+        "after_first_section",
+      ),
+      embedSelector: stringOrDefault(record.embedSelector),
       primaryLabel: stringOrDefault(record.primaryLabel, base.primaryLabel),
       primaryUrl: stringOrDefault(record.primaryUrl, base.primaryUrl),
       couponCode: stringOrDefault(record.couponCode),
@@ -808,6 +856,9 @@ export default function Index() {
     : [];
   const isSaving = saveFetcher.state !== "idle";
   const isUploading = uploadFetcher.state !== "idle";
+  const storefrontPreviewUrl = activePopup
+    ? `https://diettystore.com/?dityy_preview=${encodeURIComponent(activePopup.id)}`
+    : "https://diettystore.com";
 
   useEffect(() => {
     if (saveFetcher.data?.ok && saveFetcher.data.intent === "save") {
@@ -1163,6 +1214,9 @@ export default function Index() {
                   <button type="button" className="dityy-primary" onClick={saveActivePopup} disabled={isSaving}>
                     {activeHasUnsavedChanges ? "Save campaign" : "Saved"}
                   </button>
+                  <a className="dityy-secondary dityy-link-button" href={storefrontPreviewUrl} target="_blank" rel="noreferrer">
+                    Preview on store
+                  </a>
                   <button type="button" className="dityy-secondary" onClick={() => duplicatePopup(activePopup.id)}>
                     Duplicate
                   </button>
@@ -1318,6 +1372,22 @@ export default function Index() {
                             <option value="embed">Embed</option>
                           </select>
                         </label>
+                        {activePopup.displayType === "embed" && (
+                          <label>
+                            Embed placement
+                            <select value={activePopup.embedPlacement} onChange={(event) => updatePopup(activePopup.id, "embedPlacement", event.currentTarget.value as EmbedPlacement)}>
+                              {embedPlacements.map((placement) => (
+                                <option key={placement.id} value={placement.id}>{placement.label}</option>
+                              ))}
+                            </select>
+                          </label>
+                        )}
+                        {activePopup.displayType === "embed" && activePopup.embedPlacement === "custom" && (
+                          <label>
+                            Custom CSS selector
+                            <input value={activePopup.embedSelector} placeholder=".shopify-section:nth-of-type(2)" onChange={(event) => updatePopup(activePopup.id, "embedSelector", event.currentTarget.value)} />
+                          </label>
+                        )}
                         <label>
                           Image position
                           <select value={activePopup.imagePosition} onChange={(event) => updatePopup(activePopup.id, "imagePosition", event.currentTarget.value as PopupConfig["imagePosition"])}>
@@ -2061,6 +2131,13 @@ const adminStyles = `
     cursor: pointer;
     min-height: 36px;
     padding: 7px 12px;
+  }
+
+  .dityy-link-button {
+    align-items: center;
+    color: #202421;
+    display: inline-flex;
+    text-decoration: none;
   }
 
   .dityy-primary {
