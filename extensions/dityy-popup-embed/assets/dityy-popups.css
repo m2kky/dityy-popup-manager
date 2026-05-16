@@ -255,6 +255,15 @@
   opacity: .72;
 }
 
+.dityy-popup-card__coupon--locked {
+  cursor: default;
+  opacity: .78;
+}
+
+.dityy-popup-card__coupon--locked span {
+  letter-spacing: .14em;
+}
+
 .dityy-popup-card__countdown {
   display: grid;
   gap: 8px;

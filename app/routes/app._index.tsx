@@ -428,7 +428,7 @@ const createGrowthPlanCampaigns = (assetBaseUrl: string): PopupConfig[] => [
     collectName: true,
     collectPhone: true,
     collectEmail: false,
-    leadButtonLabel: "ابعتلي الكود",
+    leadButtonLabel: "Get code",
     successMessage: "تم التسجيل. الكود جاهز قدامك وتقدر تستخدمه دلوقتي.",
     privacyText: "أوافق على استقبال عروض دايتي من خلال واتساب أو الرسائل.",
     trigger: "delay",
@@ -967,6 +967,10 @@ export default function Index() {
       .replaceAll("{remaining_free_shipping}", remaining > 0 ? formatAmount(remaining) : "0")
       .replaceAll("{free_shipping_threshold}", formatAmount(threshold))
       .replaceAll("{cart_total}", formatAmount(previewCartSubtotal));
+  };
+  const previewCouponCode = (couponCode: string) => {
+    const visible = Math.ceil(couponCode.length / 2);
+    return `${couponCode.slice(0, visible)}${"•".repeat(Math.max(0, couponCode.length - visible))}`;
   };
   const visibilityNotes = activePopup
     ? [
@@ -2007,8 +2011,8 @@ export default function Index() {
                         )}
                         {activePopup.couponCode && (
                           <div className="dityy-preview-coupon">
-                            <span>{activePopup.couponCode}</span>
-                            <small>Copy code</small>
+                            <span>{activePopup.collectName || activePopup.collectEmail || activePopup.collectPhone ? previewCouponCode(activePopup.couponCode) : activePopup.couponCode}</span>
+                            <small>{activePopup.collectName || activePopup.collectEmail || activePopup.collectPhone ? "After details" : "Copy code"}</small>
                           </div>
                         )}
                         {(activePopup.collectName || activePopup.collectEmail || activePopup.collectPhone) && (

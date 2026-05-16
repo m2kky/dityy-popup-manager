@@ -310,6 +310,60 @@
     window.setInterval(render, 1000);
   };
 
+  const maskCouponCode = (code, revealed) => {
+    const value = String(code || "");
+    const visible = Math.min(value.length, Math.max(Math.ceil(value.length / 2), revealed));
+    return value
+      .split("")
+      .map((char, index) => (index < visible ? char : "•"))
+      .join("");
+  };
+
+  const createCouponButton = (popup, options) => {
+    const isLocked = Boolean(options && options.locked);
+    const coupon = document.createElement("button");
+    coupon.className = "dityy-popup-card__coupon" + (isLocked ? " dityy-popup-card__coupon--locked" : "");
+    coupon.type = "button";
+    coupon.innerHTML =
+      "<span>" +
+      (isLocked ? maskCouponCode(popup.couponCode, options && options.revealed) : popup.couponCode) +
+      "</span><small>" +
+      (isLocked ? "كمل البيانات" : "Copy code") +
+      "</small>";
+
+    if (isLocked) {
+      coupon.disabled = true;
+      return coupon;
+    }
+
+    coupon.addEventListener("click", () => {
+      navigator.clipboard?.writeText(popup.couponCode).catch(function () {});
+      const label = coupon.querySelector("small");
+      if (label) label.textContent = "Copied";
+      track(popup, "click", { action: "coupon_copy" });
+    });
+
+    return coupon;
+  };
+
+  const updateCouponGate = (couponGate, form, popup) => {
+    if (!couponGate || !popup.couponCode) return;
+
+    const fields = Array.from(form.querySelectorAll("input")).filter(
+      (input) => input.type !== "checkbox" || input.required,
+    );
+    const complete = fields.filter((input) => {
+      if (input.type === "checkbox") return input.checked;
+      if (input.name === "phone") return input.value.replace(/\D/g, "").length >= 11;
+      return input.value.trim().length > 0;
+    }).length;
+    const revealed = Math.ceil((String(popup.couponCode).length * complete) / Math.max(1, fields.length));
+    const code = couponGate.querySelector("span");
+    const label = couponGate.querySelector("small");
+    if (code) code.textContent = maskCouponCode(popup.couponCode, revealed);
+    if (label) label.textContent = complete >= fields.length ? "جاهز" : "كمل البيانات";
+  };
+
   const buildCampaign = (popup, displayClass) => {
     const card = document.createElement("div");
     card.className =
@@ -364,20 +418,16 @@
       content.appendChild(countdown);
     }
 
-    if (popup.couponCode) {
-      const coupon = document.createElement("button");
-      coupon.className = "dityy-popup-card__coupon";
-      coupon.type = "button";
-      coupon.innerHTML = "<span>" + popup.couponCode + "</span><small>Copy code</small>";
-      coupon.addEventListener("click", () => {
-        navigator.clipboard?.writeText(popup.couponCode).catch(function () {});
-        coupon.querySelector("small").textContent = "Copied";
-        track(popup, "click", { action: "coupon_copy" });
-      });
-      content.appendChild(coupon);
+    const collectsLead = Boolean(popup.collectName || popup.collectEmail || popup.collectPhone);
+
+    if (popup.couponCode && !collectsLead) {
+      content.appendChild(createCouponButton(popup));
     }
 
-    if (popup.collectName || popup.collectEmail || popup.collectPhone) {
+    if (collectsLead) {
+      const couponGate = popup.couponCode ? createCouponButton(popup, { locked: true, revealed: 0 }) : null;
+      if (couponGate) content.appendChild(couponGate);
+
       const form = document.createElement("form");
       form.className = "dityy-popup-card__form";
 
@@ -403,7 +453,16 @@
         const input = document.createElement("input");
         input.name = "phone";
         input.type = "tel";
-        input.placeholder = "Phone";
+        input.placeholder = "Phone - 11 digits";
+        input.inputMode = "numeric";
+        input.maxLength = 11;
+        input.pattern = "[0-9]{11}";
+        input.required = true;
+        input.title = "رقم الموبايل لازم يكون 11 رقم.";
+        input.addEventListener("input", () => {
+          input.value = input.value.replace(/\D/g, "").slice(0, 11);
+          input.setCustomValidity("");
+        });
         form.appendChild(input);
       }
 
@@ -422,15 +481,32 @@
       submit.textContent = popup.leadButtonLabel || "Send";
       form.appendChild(submit);
 
+      form.addEventListener("input", () => updateCouponGate(couponGate, form, popup));
+      form.addEventListener("change", () => updateCouponGate(couponGate, form, popup));
+
       form.addEventListener("submit", (event) => {
         event.preventDefault();
         const data = new FormData(form);
+        const phoneInput = form.querySelector('input[name="phone"]');
+        if (phoneInput) {
+          const digits = phoneInput.value.replace(/\D/g, "");
+          if (digits.length !== 11) {
+            phoneInput.setCustomValidity("رقم الموبايل لازم يكون 11 رقم.");
+            phoneInput.reportValidity();
+            return;
+          }
+          phoneInput.value = digits;
+          phoneInput.setCustomValidity("");
+        }
         track(popup, "lead", {
           name: String(data.get("name") || ""),
           email: String(data.get("email") || ""),
-          phone: String(data.get("phone") || ""),
+          phone: String(data.get("phone") || "").replace(/\D/g, ""),
           consent: data.get("consent") === "on",
         });
+        if (couponGate && popup.couponCode) {
+          couponGate.replaceWith(createCouponButton(popup));
+        }
         form.replaceWith(textNode("p", "dityy-popup-card__success", popup.successMessage || "Thanks."));
 
         if (popup.redirectToWhatsApp && popup.whatsappNumber) {
